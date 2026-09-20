@@ -95,15 +95,15 @@ Before changing the registry status from `Candidate` to `Release-grade`:
      0.30.0, mmcv 1.6.2, 112 state-dict tensors, 14 training-only tensors dropped, optimizer discarded) and the
      converted file (`d1df8044…`, 537,722,508 bytes), then the load report on `cuda` with source "converted from
      the manifest-verified source checkpoint";
-   - the tarball fetched and hashed (`59407373…`, 1,179,542,384 bytes), the 120 pinned members extracted under
+   - the tarball fetched and hashed (`d6e616cc…`, 1,179,542,384 bytes), the 120 pinned members extracted under
      `weights/multi-temporal-crop/chips/`, the dataset manifest with 36 / 12 / 12 chips and 13 classes present in
      every role, the written sample pair and `outputs/prithvi_crop_classification_sample_pairs.csv`, and three
      refusals (two-date chip, unknown label class, digital numbers out of range);
-   - the majority-class baseline and the frozen model on the test chips (on the sample: baseline accuracy ≈ 0.19,
-     mean IoU ≈ 0.01; frozen mean IoU ≈ 0.44, accuracy ≈ 0.62) and the validation chips (mean IoU ≈ 0.40);
+   - the majority-class baseline and the frozen model on the test chips (on the sample: baseline accuracy ≈ 0.14,
+     mean IoU ≈ 0.01; frozen mean IoU ≈ 0.44, accuracy ≈ 0.59) and the validation chips (mean IoU ≈ 0.46);
    - `pipe.adapt` printing epoch 0 as the frozen model, 5,312,269 trainable of 134,427,661 parameters, 36 steps,
-     the class-weighted loss, frozen BatchNorm statistics, and a four-epoch history with validation loss ≈ 1.066 →
-     ≈ 1.04 at the kept epoch;
+     the class-weighted loss, frozen BatchNorm statistics, and a four-epoch history with validation loss ≈ 0.94 →
+     ≈ 0.91 at the kept epoch;
    - `pipe.evaluate` on the test chips with the three-way comparison and
      `outputs/prithvi_crop_classification_evaluation_report.json` written (the cell asserts the kept epoch's
      validation loss is no higher than the frozen model's and that the validation mean IoU matches the history
@@ -131,7 +131,7 @@ A known-failing default path in the supported runtime blocks release (REL11).
 
 | Notebook | Commit / notebook blob | Date (UTC) | Executor | Outcome |
 |---|---|---|---|---|
-| `prithvi_crop_classification_colab.ipynb` | generated, pre-commit | 2026-09-20 | Local pre-flight harness (WSL, CPython 3.12.3, CUDA RTX 5070 Ti, `google.colab` shim, pins pre-installed) | PASS 11/11 code cells, 582.8 s — pre-flight only, **not** promotion evidence |
+| `prithvi_crop_classification_colab.ipynb` | generated, pre-commit | 2026-09-20 | Local pre-flight harness (WSL, CPython 3.12.3, CUDA RTX 5070 Ti, `google.colab` shim, pins pre-installed) | PASS 11/11 code cells, 142.1 s — pre-flight only, **not** promotion evidence |
 
 ## Recorded executions
 
@@ -142,7 +142,8 @@ runtime, not general estimates.
 
 | Date (UTC) | Commit / notebook blob | Executor | Path exercised | Wall | Outcome |
 |---|---|---|---|---|---|
-| 2026-09-20 | generated, pre-commit | Local pre-flight harness (WSL, CPython 3.12.3, `torch 2.14.0+cu130`, RTX 5070 Ti) | Default sample path (stage → verify → load the already-converted file → tarball hash → pinned-member extraction → validate → refusal probes → majority baseline → frozen evaluation → head adaptation → held-out evaluation → class maps → artifact export → reload parity), `Run all` in a fresh interpreter with the Hub files, the converted safetensors and the tarball pre-staged | 582.8 s | **PASS** — 11/11 code cells; snapshot verified (3 files), the already-converted safetensors loaded on `cuda`; the tarball hashed and the 120 pinned members served from the cache; probes refused (two-date chip, unknown label class 13, digital numbers out of range); majority baseline (Corn) accuracy 0.1854 / mean IoU 0.0143; frozen test mean IoU 0.4366, accuracy 0.6170, mean class accuracy 0.6605, validation mean IoU 0.403; head adaptation 36 steps in 258.2 s, class-weighted validation loss 1.0663 → 1.0392 at the kept epoch 2 (validation mean IoU 0.403 → 0.3975); adapted test mean IoU 0.4347, accuracy 0.6116, mean class accuracy 0.6633 (Open Water 0.705 → 0.727, Winter Wheat 0.596 → 0.607, Natural Vegetation 0.237 → 0.217); two class maps written beside their reference masks; adapter 21,249,580 bytes (8 tensors); reload parity exact (mean-IoU difference 0.0, maximum score difference 0.0). Pre-flight only, **not** promotion evidence |
+| 2026-09-20 | `acb9323` / `9e19fb22` | Kaggle Tesla T4 (`kurtvalcorza/dimer-nb2-prithvi-crop-classification` v1; image `torch 2.10.0+cu128` before the pinned install, `torch 2.14.0+cu130` after, Python 3.12.13) | Default sample path, `Run all` from a fresh interpreter with an empty Hugging Face cache and no repository checkout | 290.5 s | **FAILED** at Section 4 (6/11 code cells; the install, the 3-file snapshot, the pickle audit and conversion and the model load all passed): `validation_chips.tgz: 1179542384 bytes with sha256 d6e616cc…, pinned 1179542384 / 59407373…`. The pinned digest was wrong, not the Hub file: the builder's local copy of the tarball, a download resumed after a machine restart, had the right size but a corrupt gzip stream, and `huggingface_hub` had recorded the correct LFS digest in its cache metadata without verifying the bytes. The archive was re-downloaded, verified against the Hub LFS pointer (`d6e616cc…`) and re-indexed (1,542 real members, not the 787 the corrupt copy exposed), the 120 members were re-pinned and the notebook regenerated. Finding, not evidence |
+| 2026-09-20 | generated, pre-commit | Local pre-flight harness (WSL, CPython 3.12.3, `torch 2.14.0+cu130`, RTX 5070 Ti) | Default sample path (stage → verify → load the already-converted file → tarball hash → pinned-member extraction → validate → refusal probes → majority baseline → frozen evaluation → head adaptation → held-out evaluation → class maps → artifact export → reload parity), `Run all` in a fresh interpreter with the Hub files, the converted safetensors and the tarball pre-staged | 142.1 s | **PASS** — 11/11 code cells; snapshot verified (3 files), the already-converted safetensors loaded on `cuda`; the tarball hashed (`d6e616cc…`) and the 120 pinned members streamed out of it; probes refused (two-date chip, unknown label class 13, digital numbers out of range); majority baseline (Natural Vegetation) accuracy 0.1371 / mean IoU 0.0105; frozen test mean IoU 0.4379, accuracy 0.5905, mean class accuracy 0.6239, validation mean IoU 0.4609; head adaptation 36 steps in 36.7 s, class-weighted validation loss 0.9368 → 0.9114 at the kept epoch 4 (validation mean IoU 0.4609 → 0.4452); adapted test mean IoU 0.4302, accuracy 0.5813, mean class accuracy 0.6250 (Fallow/Idle Cropland 0.323 → 0.379, Wetlands 0.403 → 0.406, Natural Vegetation 0.250 → 0.188, Cotton 0.432 → 0.399); two class maps written beside their reference masks; adapter 21,249,580 bytes (8 tensors); reload parity exact (mean-IoU difference 0.0, maximum score difference 0.0). Pre-flight only, **not** promotion evidence |
 
 ## Current status
 

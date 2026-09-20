@@ -95,7 +95,7 @@ TEMPLATE = {
         "safetensors file whose digest is pinned in the carried module; the network you run is rebuilt from `modeling.py`, "
         "carried in this notebook in plain PyTorch, and loads that file strictly. **The dataset ships as one 1.18 GB tarball**, "
         "so Section 4 pins it by size and digest, streams through it once and copies out exactly the 120 pinned members (each "
-        "pinned again by size and digest, no `extractall`, no paths taken from the archive), and leaves the other 1,455 alone. "
+        "pinned again by size and digest, no `extractall`, no paths taken from the archive), and leaves the other 1,422 alone. "
         "**The model was selected on these chips**: every chip in the archive belongs to the upstream validation split, on which "
         "the published checkpoint's best epoch was chosen, so the bounded adaptation in Section 6 is a demonstration of the "
         "contract, selected by validation loss with the frozen model as epoch 0; the point of the contract is the same recipe "
@@ -129,7 +129,7 @@ TEMPLATE = {
                 "## 4. Sample chips, validation and roles\n\n"
                 "The default dataset is 60 labelled 224 × 224 chips of the HLS multi-temporal crop classification dataset — three "
                 "2022 HLS dates of six bands each, with a 13-class label derived from the USDA Cropland Data Layer — drawn from "
-                "the 218 chips of the archive that carry both an image and a mask. Roles are assigned per 4 × 4-chip block of the "
+                "the 771 chips of the archive. Roles are assigned per 4 × 4-chip block of the "
                 "chip grid (36 training, 12 validation, 12 test, each stratified by dominant class so all 13 classes occur in every "
                 "role): chips of one block never straddle roles, but neighbouring blocks may, so this is a split by block, not by "
                 "region. `fetch_corpus` downloads the dataset tarball from the Hub at its immutable revision, refuses it on any "
@@ -196,10 +196,10 @@ TEMPLATE = {
                 "(−1 pixels excluded) and reports the per-class IoU and recall, the mean IoU and mean class accuracy over the "
                 "classes present, the mean F1 and the overall accuracy; the **majority-class baseline** — every pixel named with "
                 "the most frequent class of the scored labels, the best any constant map can do — is scored on the same pixels.\n\n"
-                "Look for: a mean IoU near 0.44 and an accuracy near 0.62 on the test chips (in the build record 0.437 and 0.617, "
-                "against 0.014 and 0.185 for the majority class, Corn; the model card reports a mean IoU of 0.427, an overall "
-                "accuracy of 60.6 % and a mean class accuracy of 64.1 % on the full validation split), with Open Water and Winter Wheat the easiest classes and Cotton and "
-                "Natural Vegetation the hardest. These are sample-sanity numbers on 12 chips, not the benchmark."
+                "Look for: a mean IoU near 0.44 and an accuracy near 0.59 on the test chips (in the build record 0.438 and 0.591, "
+                "against 0.011 and 0.137 for the majority class, Natural Vegetation; the model card reports a mean IoU of 0.427, an overall "
+                "accuracy of 60.6 % and a mean class accuracy of 64.1 % on the full validation split), with Open Water and Winter Wheat the easiest classes and Natural Vegetation and "
+                "Other the hardest. These are sample-sanity numbers on 12 chips, not the benchmark."
             ),
             "code": (
                 "import time\n\n"
@@ -231,7 +231,7 @@ TEMPLATE = {
                 "an AdamW step at a small fixed learning rate with gradient-norm clipping and float16 loss scaling. Epoch 0 records "
                 "the frozen model's validation loss and metrics; the epoch with the lowest validation loss is kept — which can be "
                 "epoch 0, since the packaged checkpoint was selected on the very split these chips come from.\n\n"
-                "Watch the validation loss: in the build record it fell from 1.066 to 1.039 at epoch 2 and drifted up afterwards, while the validation mean IoU stayed within 0.01 of the frozen model's — the class-weighted loss and the mean IoU the checkpoint was selected by do not rank the same head, which is exactly why the kept epoch is chosen on the loss you declare and reported beside the metric you care about. Four epochs (36 steps) take a few minutes on a T4, the validation pass after each epoch included. "
+                "Watch the validation loss: in the build record it fell from 0.937 to 0.911 over four epochs while the validation mean IoU slipped from 0.461 to 0.445 — the class-weighted loss and the mean IoU the checkpoint was selected by do not rank the same head, which is exactly why the kept epoch is chosen on the loss you declare and reported beside the metric you care about. Four epochs (36 steps) take a few minutes on a T4, the validation pass after each epoch included. "
                 "`TRAINABLE = 'head+last_block'` also unfreezes the last encoder block (7.1 M more parameters)."
             ),
             "code": (
@@ -261,7 +261,7 @@ TEMPLATE = {
                 "puts the baseline, the frozen and the adapted numbers side by side. The cell asserts what the procedure "
                 "guarantees — the kept epoch's validation loss is no higher than the frozen model's, and re-scoring the validation "
                 "chips reproduces the kept epoch's mean IoU within 0.01 (float16 kernels are not bit-reproducible across batch "
-                "sizes) — and prints the test numbers without asserting a direction: on this sample the test mean IoU moved from 0.437 to 0.435 and the accuracy from 0.617 to 0.612 in the build record (the kept epoch lowered the class-weighted validation loss, not the mean IoU), a sample-sanity observation on 12 chips with no dispersion estimate, not a quality claim. With your own chips from "
+                "sizes) — and prints the test numbers without asserting a direction: on this sample the test mean IoU moved from 0.438 to 0.430 and the accuracy from 0.591 to 0.581 in the build record (the kept epoch lowered the class-weighted validation loss, not the mean IoU), a sample-sanity observation on 12 chips with no dispersion estimate, not a quality claim. With your own chips from "
                 "another region or year, the gap between frozen and adapted is the number to watch."
             ),
             "code": (
@@ -366,9 +366,9 @@ TEMPLATE = {
     ],
     "closing": (
         "## Interpretation and limits\n\n"
-        "On 12 held-out chips the packaged crop-classification model reaches a mean IoU near 0.44 and an accuracy near 0.62 "
-        "against a majority-class baseline of 0.01 and 0.19; a bounded fine-tuning of its segmentation head on 36 chips, "
-        "selected by validation loss with the frozen model as a candidate, lowers the class-weighted validation loss a little and leaves the mean IoU where it was (0.437 → 0.435 on the test chips in the build record). That is the claim: the "
+        "On 12 held-out chips the packaged crop-classification model reaches a mean IoU near 0.44 and an accuracy near 0.59 "
+        "against a majority-class baseline of 0.01 and 0.14; a bounded fine-tuning of its segmentation head on 36 chips, "
+        "selected by validation loss with the frozen model as a candidate, lowers the class-weighted validation loss a little and leaves the mean IoU where it was (0.438 → 0.430 on the test chips in the build record). That is the claim: the "
         "adaptation contract runs end to end on real labelled multispectral time series drawn from a digest-verified tarball, "
         "the pickle is audited and converted rather than served, the network is carried in plain PyTorch, and the artifact that "
         "carries the change is 21 MB and reloads with the same outputs. It is not a claim that this sample improves the model — "
@@ -382,7 +382,7 @@ TEMPLATE = {
         "as its training pipeline did, which is not the (bands, dates) layout the axis names suggest — a different band order "
         "or date order is classified without complaint and silently wrong. **Split by region, not by chip:** neighbouring chips "
         "share fields, and a random split makes memorisation look like skill. **Read the baseline and the per-class IoU first:** "
-        "the majority class alone is right on a fifth of the pixels, and a mean IoU hides that Cotton is barely found while "
+        "the majority class alone is right on a seventh of the pixels, and a mean IoU hides that Natural Vegetation is barely found while "
         "Open Water is easy.\n\n"
         "Successful execution proves that the recorded repository revision's pipeline modules, carried in this standalone "
         "notebook, can acquire and digest-verify a pickled upstream checkpoint, audit and convert it into safetensors without "
