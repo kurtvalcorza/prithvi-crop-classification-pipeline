@@ -1,0 +1,25 @@
+{
+  "format": "dimer_hf_snapshot",
+  "formatVersion": 1,
+  "modelKey": "prithvi-eo-1.0-100m-crop",
+  "modelId": "ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification",
+  "revision": "b53a88b8da673800b67c34a98a527b77076e7035",
+  "files": [
+    {
+      "path": "multi_temporal_crop_classification_Prithvi_100M.pth",
+      "bytes": 1680468041,
+      "sha256": "37ed41637eccccec65ca2031324e2c03a4f168e1ea0ea71ad180910589fa018c"
+    },
+    {
+      "path": "README.md",
+      "bytes": 4333,
+      "sha256": "eec9be05906903af9a34924233fd4a3284c54ef09c1e77b2a5a74e85b663c726"
+    },
+    {
+      "path": "multi_temporal_crop_classification_Prithvi_100M.py",
+      "bytes": 7085,
+      "sha256": "ee456e701b6d9fddfe29f35fb649095f65ac39855fdb3ee6df8cbb4e6ca79451"
+    }
+  ],
+  "totalBytes": 1680479459
+}

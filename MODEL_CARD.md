@@ -1,0 +1,162 @@
+---
+license: apache-2.0
+model_card_spec: "1.1"
+pipeline_tag: image-segmentation
+task: "Others - Earth Observation Crop Classification (multi-temporal HLS, 13 CDL classes)"
+base_model: ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification
+date_published: "2023-07-30"
+date_published_source: "Hugging Face Hub commit `389998ba` (\"Upload multi_temporal_crop_classification_Prithvi_100M.pth\", 2023-07-30) that published the checkpoint; the pinned revision `b53a88b8…` (2025-09-05, \"Update README.md\") carries the identical LFS object (SHA-256 `37ed4163…`). The Prithvi-EO-1.0 preprint (arXiv:2310.18660) is from October 2023."
+---
+
+# Prithvi-EO-1.0-100M Multi-Temporal Crop Classification — 13-Class Segmentation (Three-Date HLS Chips & Bounded Head Fine-Tuning)
+
+[![Hugging Face](https://img.shields.io/badge/%F0%9F%A4%97%20Hugging%20Face-ibm--nasa--geospatial%2FPrithvi--EO--1.0--100M--multi--temporal--crop--classification-ffcc4d?style=flat)](https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification)
+[![Upstream GitHub](https://img.shields.io/badge/Upstream%20GitHub-NASA--IMPACT%2Fhls--foundation--os-181717?style=flat&logo=github&logoColor=white)](https://github.com/NASA-IMPACT/hls-foundation-os)
+[![Paper](https://img.shields.io/badge/arXiv-2310.18660-b31b1b.svg)](https://arxiv.org/abs/2310.18660)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](https://www.apache.org/licenses/LICENSE-2.0)
+
+> [!WARNING]
+> ⚠️ **Provided for research, training, and evaluation purposes only.** Model weights are redistributed unmodified under their upstream license, which controls your use, including any commercial use or redistribution; the accompanying code and notebooks are released under this repository's license. All of it is supplied **"as is"**, without warranty of any kind, and has not been validated for production, clinical, or safety-critical use. Running the notebooks downloads third-party weights and datasets governed by their own licenses and consumes compute on your own Colab/Kaggle account. To the maximum extent permitted by law, the maintainers of this repository and the DIMER platform accept no liability for any damages arising from their use. Hosting implies no affiliation with or endorsement by the original authors.
+
+> [!IMPORTANT]
+> **The upstream asset is an mmsegmentation pickle, the network is vendored, and the input layout is the one the checkpoint learned.** `multi_temporal_crop_classification_Prithvi_100M.pth` is a torch zip archive holding the state dict, the Adam optimizer state and a `meta` record whose pickle references, besides the four torch state-dict globals, three data-only names that rebuild one numpy scalar (`numpy.core.multiarray.scalar`, `numpy.dtype`, `_codecs.encode`). `src/prithvi_crop_classification_pipeline/pipeline.py` statically audits it, unpickles it **once** through `torch.load(weights_only=True)` with those three names bound to inert stand-ins, loads the 98 inference tensors strictly into the network vendored in `modeling.py` (plain PyTorch — no mmcv, mmseg, timm or einops), drops the training-only auxiliary head and the optimizer, and serves only the resulting 538 MB safetensors, whose digest is pinned. The upstream data pipeline folded the 18 date-major channels into a (6, 3, H, W) tensor with a plain `reshape`, which mixes the band and date axes; the checkpoint learned that layout (61.7 % pixel accuracy on the tutorial's test chips against 16.9 % with a bands-by-dates layout), and `pipeline._normalise` reproduces it exactly. On 12 held-out chips the frozen model reaches a mean IoU of 0.437 and an accuracy of 0.617 against a majority-class baseline of 0.014 and 0.185 — sample-sanity evidence, not the benchmark (the model card reports 0.427 / 60.6 % on the full validation split). The bounded adaptation is a fine-tune of the FCN head (5.3 M parameters) with the upstream class-weighted loss, selected by validation loss; since every chip of the archive belongs to the split the checkpoint was selected on, it lowers the loss slightly and leaves the mean IoU where it was.
+
+---
+
+## Interactive Colab Tutorials
+
+This pipeline provides a ready-to-run interactive Google Colab notebook that exercises the repository's public API end to end — stage and digest-verify the pickled checkpoint, audit and convert it into safetensors, extract and validate pinned labelled chips from a digest-verified tarball, score the majority-class baseline and the frozen model, fine-tune the segmentation head, evaluate on held-out chips, write class maps, and export and reload the adapter:
+
+- **End-to-End Crop-Classification Fine-Tuning Tutorial**:  
+  [![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](https://colab.research.google.com/github/kurtvalcorza/prithvi-crop-classification-pipeline/blob/main/tutorials/prithvi_crop_classification_colab.ipynb) [`prithvi_crop_classification_colab.ipynb`](https://github.com/kurtvalcorza/prithvi-crop-classification-pipeline/blob/main/tutorials/prithvi_crop_classification_colab.ipynb)  
+  *End-to-end use of the Prithvi-EO-1.0-100M crop-classification checkpoint: the pickle audited and converted once, 60 labelled three-date HLS chips extracted from the digest-pinned dataset tarball with roles by spatial block, structural validation with refusal probes, the majority-class baseline, the frozen model's per-class IoU, a bounded fine-tuning of the FCN head with the upstream class-weighted loss and validation-loss epoch selection, a paired comparison on held-out chips, class maps of two chips, and safetensors adapter export with verified reload parity.*
+
+---
+
+#### Description
+
+`ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification` at revision `b53a88b8da673800b67c34a98a527b77076e7035` is the upstream authors' crop-classification fine-tune of Prithvi-EO-1.0-100M (Jakubik et al., 2023), NASA and IBM's first foundation model for Harmonized Landsat Sentinel-2 imagery: a ViT-B masked autoencoder (12 blocks, embedding dimension 768, 16 × 16 patches, six bands, three dates) pretrained on HLS stacks over the contiguous United States. The checkpoint packaged here, `multi_temporal_crop_classification_Prithvi_100M.pth` (1,680,468,041 bytes, SHA-256 `37ed4163…`), is the mmsegmentation checkpoint the fine-tuning produced: a `TemporalViTEncoder` of **six** blocks (the encoder truncated to half its depth), a `ConvTransformerTokensToEmbeddingNeck` that drops the class token, folds the 3 × 14 × 14 tokens into a 2304-channel map and upsamples it 16× through four transposed convolutions, an `FCNHead` (one 3 × 3 convolution to 256 channels with BatchNorm and ReLU, dropout, a 1 × 1 convolution to 13 classes) and a training-only auxiliary head — 112 tensors, of which 98 (134,428,174 elements; 134,427,661 parameters) form the inference network — plus the Adam optimizer state that makes the file three times the size of the network. It was trained for 80 epochs (30,800 iterations, mmsegmentation 0.30.0, mmcv 1.6.2) with a class-weighted cross-entropy on 224 × 224 chips of three 2022 HLS dates, and the published file is the epoch with the best validation mean IoU (`best_mIoU_epoch_80`).
+
+What this repository adds is the `PrithviCropPipeline` class in `src/prithvi_crop_classification_pipeline/pipeline.py`: manifest verification of the 3-file Hub snapshot before any model library is imported (`verify_snapshot`, which also checks the converted file against its pinned digest when present), fresh-clone staging at the pinned revision (`stage_missing_files`), a **static audit of the pickle** that lists every global it would import with `pickletools` and refuses anything outside the allow-list (`audit_pickle`, digest pinned; the three `meta` globals are reported separately), a **one-time conversion** through torch's weights-only unpickler with those three names bound to inert stand-ins (`restricted_load`), the auxiliary head and the optimizer dropped and the 98 tensors loaded strictly into the vendored network before the state dict is saved as safetensors (`convert_model`), a labelled-chip contract with explicit ceilings and refusal probes (`validate_dataset`, `validate_inputs`), pixel-level 13-class metrics against a majority-class baseline (`evaluate`), a bounded fine-tuning contract for the head — optionally the last encoder block — with the upstream class weights and validation-loss epoch selection (`adapt`), and a portable safetensors adapter with a verified manifest (`save_artifact`, `from_artifact`). `samples.py` pins 120 members of the dataset's validation archive by path, size and SHA-256 and extracts exactly those; `modeling.py` is the network, vendored from `NASA-IMPACT/hls-foundation-os` at commit `3b6d401f3b4527059af0e44bd640225285e1933d` and the mmsegmentation 0.30 head it was trained with.
+
+#### Intended Use and Limitations
+
+###### Primary Intended Uses
+
+Per-pixel classification of 224 × 224 three-date HLS chips (six bands per date, digital numbers) into the 13 Cropland-Data-Layer-derived classes the checkpoint was trained on, evaluation of that classification on labelled chips against a majority-class baseline, and bounded fine-tuning of the segmentation head to a user's labelled chips with a portable adapter — as a tutorial and evaluation contract for a DIMER model profile, and as the runtime that profile would serve. The default tutorial path downloads the checkpoint and the dataset tarball from the Hugging Face Hub at immutable revisions and nothing else.
+
+###### Primary Intended Users
+
+Researchers, students and engineers evaluating Prithvi-EO-1.0-based crop mapping on HLS data; DIMER operators publishing the model profile; maintainers of the fleet who need a reproducible reference for the pickle-audit-and-convert recipe applied to an mmsegmentation checkpoint and for a network vendored without its training framework.
+
+###### Out-of-scope use cases
+
+Operational crop-acreage estimation or any agricultural, insurance, subsidy or regulatory decision taken from these maps without independent validation; use outside the contiguous United States or outside the 2022 growing season the training data cover; inputs other than three dates of the six HLS bands at the HLS scaling (a different band order, date order, product level or scaling is classified without complaint and silently wrong); chips other than 224 × 224 (tiling and stitching are the caller's); yield estimation; field delineation; any claim that a 60-chip sample stands in for an evaluation.
+
+#### Factors
+
+###### Groups
+
+The 13 classes are unequally represented (Natural Vegetation and Corn dominate the training data; Open Water, Sorghum, Cotton and Alfalfa are rare), and the upstream loss weights rare classes up to 9× to compensate; the per-class IoU still ranges from 0.10 (Cotton) to 0.71 (Open Water) on the tutorial's test chips. Performance also varies with the region (crop calendars and field sizes differ across the United States), the three acquisition dates and cloud contamination of any of them, and the quality of the Cropland Data Layer labels, which the upstream card itself calls noisy.
+
+###### Instrumentation
+
+Harmonized Landsat Sentinel-2 (HLS) surface reflectance at 30 m — the six bands blue, green, red, narrow NIR, SWIR 1, SWIR 2 as int16 digital numbers (reflectance × 10 000) — for three dates of one growing season, stacked date-major into 18 channels. Chips from other sensors, other band selections, other resolutions or reflectance in other units are outside the contract; a chip in [0, 1] is scaled by 10 000 before use.
+
+###### Environment
+
+The pipeline runs on a CUDA GPU in float16 autocast (about 0.04 s per chip at batch 4 on an RTX 5070 Ti once the kernels are warm; the default adaptation needs about 4 GB) or on CPU in float32 (several seconds per chip; the transposed convolutions of the neck dominate). No network access is needed after the snapshot and the tarball are staged.
+
+#### Metrics
+
+###### Performance Measures
+
+Per-class IoU and recall over the labelled pixels of the scored chips (the ignore index excluded), mean IoU and mean class accuracy averaged over the classes that occur in the labels or the predictions (mmseg's `nanmean` convention), mean F1 and overall pixel accuracy — all pooled over the chips scored together, with the majority-class baseline (the most frequent class of the scored labels everywhere) scored on the same pixels. Adaptation is judged by the same numbers on held-out chips beside the frozen model and by the validation loss, which selects the epoch. Every number in this card is tutorial sample-sanity evidence from 12 test chips.
+
+###### Decision thresholds
+
+The class map is the argmax of the 13 softmax scores with no threshold; the scores are the head's outputs, not calibrated probabilities. Any minimum-confidence rule, class-specific threshold or post-processing (majority filtering, field-level voting) is the deployment's to set and to validate.
+
+###### Approaches to uncertainty and variability
+
+No dispersion estimate: one seeded run, 12 test chips, pixel-pooled metrics that let large fields dominate. Adaptation results depend on the seed (shuffling and flips), the batch size, the learning rate, the epoch count and the validation set that selects the epoch; the tutorial fixes all of them and records the per-epoch history. Chips of neighbouring blocks may share fields, so the split by block bounds but does not eliminate spatial leakage.
+
+#### Ethical considerations and biases
+
+###### Data
+
+The tutorial's labelled data are 60 chips of the CC BY 4.0 HLS multi-temporal crop classification dataset (NASA IMPACT / IBM): satellite reflectance over agricultural land in the United States with labels derived from the USDA Cropland Data Layer — no personal data, no imagery of people. The pretraining and fine-tuning data are the upstream authors'; their coverage (the contiguous United States, 2022) bounds where the model is meaningful. Users' own chips may carry field-level records tied to a producer; the tutorial says so and uploads nothing by default.
+
+###### Human Life
+
+Crop maps do not act on people directly, but acreage and crop-type statistics feed decisions — insurance, subsidies, market forecasts — that affect producers; a map with 62 % pixel accuracy is not a basis for such decisions without validation against ground truth, and this card claims none.
+
+###### Mitigations
+
+The snapshot is pinned to an immutable revision and verified by size and SHA-256 before any model library is imported. The pickle is statically audited against an allow-list with a pinned digest, unpickled once through torch's weights-only loader with the three data-only `meta` names bound to inert stand-ins that touch no numpy code, and converted into safetensors whose digest is pinned; the network is vendored in plain PyTorch, so no mmcv, mmsegmentation or Hub-hosted code runs. Inputs are validated structurally before inference (shape, date and band counts, chip size, finiteness, value range, label values) and every refusal names its rule. Adaptation is bounded to declared scopes, keeps BatchNorm statistics frozen, is transactional on failure, and its artifact is verified — format, base identity, converted-base digest, scope, tensor names, size and SHA-256 — before deserialising. The tarball is pinned and streamed without `extractall`; members are written under their base names, never at archive paths. The tutorial states the majority baseline beside every model number and the layout caveat beside the input contract.
+
+###### Risks and harms
+
+A wrong band order, date order or scaling produces confident, plausible-looking, wrong maps. Class imbalance and label noise make the rarer classes least reliable exactly where a user may care most (specialty crops). The split-by-block sample overstates skill relative to a new region. The head-only adaptation cannot correct a domain shift in the encoder's features, and an adapted head that lowered the class-weighted loss may not raise the mean IoU — the tutorial shows this. The checkpoint was selected on the very archive the tutorial samples from, so its numbers there are optimistic.
+
+###### Use cases
+
+Tutorial and evaluation of Prithvi-EO-1.0 crop classification on HLS chips; a DIMER model profile serving the converted checkpoint; a reference for auditing and converting mmsegmentation checkpoints and vendoring their networks; a starting point for fine-tuning the head on a user's labelled chips, with the caveats above.
+
+## Immutable provenance
+
+- Model: `ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification`
+- Revision: `b53a88b8da673800b67c34a98a527b77076e7035`
+- Manifest: `weights/prithvi-eo-1.0-100m-crop/dimer-base-manifest.json`, format `dimer_hf_snapshot` v1, 3 files, `totalBytes` 1680479459
+- Source asset `multi_temporal_crop_classification_Prithvi_100M.pth` (1,680,468,041 bytes) SHA-256: `37ed41637eccccec65ca2031324e2c03a4f168e1ea0ea71ad180910589fa018c` (first published in Hub commit `389998ba` on 2023-07-30). Torch zip archive (`archive/data.pkl`, 318 members) holding an mmsegmentation checkpoint: `state_dict` of 112 tensors (109 float32, 3 int64), `optimizer` (Adam state for 102 parameters), `meta` (epoch 80, iter 30800, mmseg 0.30.0+b8da6b9, mmcv 1.6.2, seed, config text, `hook_msgs.best_score` as a numpy scalar). **Never loaded by the runtime path.**
+- Static audit (`audit_pickle`): globals `_codecs.encode`, `collections.OrderedDict`, `numpy.core.multiarray.scalar`, `numpy.dtype`, `torch.FloatStorage`, `torch.LongStorage`, `torch._utils._rebuild_tensor_v2`; audit SHA-256 `465513635354b8c8a9c4bfd4a37b39d5306eb8ec63527905ce0195075d04108d`; 0 violations; the three `meta` globals are data-only reconstructors bound to inert stand-ins at conversion.
+- Converted serving file (asset spec §11.2, `derived_from_sha256` = the source digest above; git-ignored, regenerated deterministically by `convert_model`): `prithvi-eo-1.0-100m-crop.safetensors` (537,722,508 bytes, 98 tensors, 134,428,174 elements of which 134,427,661 are parameters) SHA-256 `d1df8044700a0d1e00b11b1fbac66e0495cf6647e1632a858c003eaf4b5ce36d`; dropped: the 14 `auxiliary_head.*` tensors (training-only) and the optimizer state.
+- Also staged: upstream `README.md` (4,333 bytes) and the mmsegmentation config `multi_temporal_crop_classification_Prithvi_100M.py` (7,085 bytes; the source of the class names, loss weights, band statistics and architecture constants); not staged: `config.yaml`, `multi_temporal_crop_classification.png`.
+- Vendored network: `src/prithvi_crop_classification_pipeline/modeling.py`, rewritten in plain PyTorch from `geospatial_fm/geospatial_fm.py` of `NASA-IMPACT/hls-foundation-os` at commit `3b6d401f3b4527059af0e44bd640225285e1933d` (file SHA-256 `5e16a033…`; Apache-2.0) and the mmsegmentation 0.30 `FCNHead` / `ConvModule`; the computed sin/cos positional table equals the checkpoint's `backbone.pos_embed` exactly.
+- Tutorial data: `validation_chips.tgz` of the Hugging Face dataset `ibm-nasa-geospatial/multi-temporal-crop-classification` at revision `f285bb27c8f623a0fb6a44a6fd953c3ad34007d6` (1,179,542,384 bytes, SHA-256 `59407373b38c575a081cfbf1d70c92cfc45430be5d5e2f6a51c4b83a642a23fb`); 120 pinned members (60 `_merged.tif` chips of 1,808,174 bytes and their `.mask.tif` masks; 111,617,880 bytes in total), each pinned by member path, byte size and SHA-256 in `samples.py`, with roles by 4 × 4-chip block (36 train, 12 validation, 12 test, stratified by dominant class) drawn on 2026-09-20 from the 218 chips of the archive that carry both an image and a mask
+- Upstream reference: https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification · https://huggingface.co/datasets/ibm-nasa-geospatial/multi-temporal-crop-classification · https://github.com/NASA-IMPACT/hls-foundation-os
+
+## Input/output contract
+
+- `PrithviCropPipeline.from_pretrained(device=None, weights_dir=None, allow_download=False, require_source=True, report=None)`: stages and verifies the snapshot, audits and converts the checkpoint when the safetensors file is absent (reporting through `report`), builds the vendored network and loads the safetensors strictly. `require_source=False` accepts the digest-verified converted file without the checkpoint.
+- `predict(records, *, batch_size=4) -> dict` with `model` (id, revision, key, `adapted`), `classes`, `decision_rule`, `predictions` (per record: `id`, `mask` (H, W) uint8 with classes 0..12, `scores` (13, H, W) float32, `class_fraction`), `seconds`.
+- `evaluate(records, *, batch_size=4) -> dict`: `n_records`, `metric`, `model` (`iou` and `recall` per class, `mean_iou`, `mean_accuracy`, `mean_f1`, `accuracy`, `label_fraction`, `pixels`, `classes_scored`), `baseline_majority` (the same fields plus `majority_class`), `adapted`, `seconds`.
+- `adapt(train, val=None, *, epochs=6, lr=1e-4, batch_size=4, trainable="head", seed=0, progress=None) -> dict`: bounded AdamW fine-tuning with the upstream class-weighted cross-entropy; returns the trainable set and counts, hyperparameters, `best_epoch`, per-epoch `history` (epoch 0 = the frozen model, each with `train_loss`, `val_loss` and the validation metrics) and `seconds`. `trainable="head+last_block"` also unfreezes encoder block 5. The tutorial uses `epochs=4, lr=1e-5`.
+- `save_artifact(output_dir, metadata=None) -> Path` writes `adapter.safetensors` (the trained tensors) + `manifest.json` (format, base model id/revision/key and converted digest, adaptation record, history, tensor names, file size and SHA-256); `from_artifact(...)` / `load_artifact(...)` verify all of that before deserialising.
+- `validate_inputs(record) -> dict` (`id`, `shape`, `value_range`, `has_label`, `label_fraction`, `ignored_pixels`) and `validate_dataset(records, *, min_records=4, max_records=2000, require_labels=True) -> dict` (normalised `records`, counts, `class_pixel_fraction`, `classes_present`, `ignored_pixels`, `value_range`, `digest`) raise exactly what the execution path would raise; `check_record` returns one normalised record. `read_chip(path)` reads an 18-band GeoTIFF as (3, 6, H, W); `read_mask(path)` reads a 0 / 1..13 label raster as 0..12 / −1; `fetch_sample_dataset(cache_dir=None)` / `fetch_corpus` / `fetch_tarball` / `extract_pinned_members` are the pinned-data primitives; `load_byod_dataset(path)`, `write_sample_pair`, `write_dataset_csv` the BYOD I/O; `split_dataset`, `check_split_disjoint`, `chip_block`, `dataset_manifest` the split helpers; `segmentation_metrics`, `confusion_matrix`, `metrics_from_confusion`, `majority_baseline` the metrics.
+- `audit_pickle(path, allowed=…)`, `restricted_load(path)`, `convert_model(path=None)`, `verify_converted(path=None)` and `build_model()` are the serialization primitives.
+- Constants: `BANDS` (6), `NUM_FRAMES = 3`, `MEANS`, `STDS` (per band, digital numbers), `REFLECTANCE_SCALE = 10000` (applied only to chips in [0, 1.5]), `VALUE_RANGE = (-2000, 20000)`, `IMAGE_SIZE = 224`, `NUM_CLASSES = 13`, `CLASS_NAMES`, `CLASS_WEIGHTS`, `IGNORE_INDEX = -1`, `MIN_RECORDS = 4`, `MAX_RECORDS = 2000`, `PARAMETER_COUNT = 134427661`, `STATE_TENSORS = 98`, `SOURCE_STATE_TENSORS = 112`, `META_GLOBALS`, `ADAPTATION_MODES = ("head", "head+last_block")`, `ARTIFACT_FORMAT = "org.valcorza.prithvi-crop-classification.adapter.v1"`, `TAR_SHA256`, `DATASET_REVISION`.
+
+## DIMER deployment notes
+
+| Field | Status |
+|---|---|
+| **DIMER status** | **Planned / conditional** — the `.pth` asset-format and deserialization-trust review the fleet inventory requires is what this repository implements; the review's acceptance is Kurt's call |
+| Licence | Apache-2.0 (weights, the upstream `hls-foundation-os` code, and this repository's code) — use, modification, redistribution and commercial use permitted with the licence and notices preserved |
+| Weights | Would be redistributed converted, not unmodified: the served artifact is the deterministic safetensors derived from the pinned checkpoint, with both identities recorded (asset spec §11.2); this repository redistributes neither |
+| Remote code | **Not required** — no Hub-hosted module is imported and no mmcv / mmsegmentation is installed; the network is `modeling.py` in this repository |
+| Executable serialization | One pickle, unpickled **once** at conversion through torch's weights-only loader after a digest check and a static audit, with three data-only `meta` globals bound to inert stand-ins; a DIMER profile should carry the safetensors file and never the `.pth` |
+| Runtime | `torch==2.14.0` + `tifffile` + `numpy` + `safetensors` + `huggingface-hub`; float16 autocast on CUDA; a GPU is advisable (a chip takes several seconds on CPU) |
+| Upload format | `prithvi-eo-1.0-100m-crop.safetensors` (537,722,508 bytes, SHA-256 `d1df8044…`); **the `.pth` file must not be uploaded** |
+| Input contract | 224 × 224 chips of three dates × six HLS bands (blue, green, red, narrow NIR, SWIR 1, SWIR 2), date-major, as (3, 6, 224, 224) arrays or 18-band GeoTIFFs, in digital numbers (reflectance × 10 000); labels 0..12 / −1 for adaptation (files: 0 = no data, 1..13) |
+| Sample data | the dataset's `validation_chips.tgz` (CC BY 4.0) fetched at run time from the Hub at an immutable revision, 120 pinned members extracted, never vendored |
+
+**One thing is open, and it is neither the licence nor the code:** whether a one-time unpickle through torch's weights-only loader, after a static audit with a pinned digest and with three data-only names bound to stand-ins — in the build and in the tutorial runtime, where the notebook converts what it downloads — meets the DIMER bar, or whether DIMER should host only the safetensors converted and verified once by the maintainer. The served artifact is the same file either way.
+
+## Runtime
+
+- Pins (`pyproject.toml`): `torch==2.14.0`, `tifffile==2026.9.15`, `numpy==2.5.3`, `safetensors==0.8.0`, `huggingface-hub==1.32.0`; dev `pytest==8.4.2`, `ruff==0.16.6`. Python 3.12; offline tests in a Windows venv without model libraries, model-backed runs in a WSL venv (`dimer-prithvi`, `torch 2.14.0+cu130`) on an RTX 5070 Ti laptop GPU (12 GB).
+- Executed 2026-09-20: `python -m pytest -q -o addopts= tests` in the WSL venv — 39 passed (35 offline including the stub-model adaptation, the synthetic-tarball tests and the randomly initialised vendored network + 3 notebook-parity tests + the model-backed smoke on the converted weights), exit 0; `ruff check src tests tools` clean; `tools/validate_release_assets.py` PASS.
+- Executed 2026-09-20, build-time conversion (Windows venv, CPU, `torch 2.14.0`): the static audit found the four state-dict globals and the three `meta` globals; `torch.load(weights_only=True)` first refused the file (`numpy.core.multiarray.scalar`), and under numpy 2 the legacy name resolves to `numpy._core`, so the conversion binds the three names to stand-ins rather than to numpy; the restricted load returned a checkpoint with `meta`, `state_dict` (112 tensors) and `optimizer`; `load_state_dict(strict=True)` on the vendored network matched every key with 0 missing, 0 unexpected and 0 shape mismatches after the 14 auxiliary-head tensors were dropped; the safetensors (537,722,508 bytes) reproduced the pinned digest on two consecutive conversions (13.1 s each).
+- Executed 2026-09-20, vendoring check on the GPU: the computed 3-D sin/cos table equals `backbone.pos_embed` with a maximum absolute difference of 0.0; on the 12 test chips the network scores a pixel accuracy of 0.6170 with the upstream reshape layout and 0.1686 with a bands-by-dates layout — the layout the checkpoint learned is the reshape.
+- Executed 2026-09-20, dataset pinning: the 1.18 GB tarball was indexed once (787 real members: 397 `_merged.tif` chips of 224 × 224 × 18 int16 and 390 `.mask.tif` masks of 224 × 224 uint8 with values 1..13, no class 0; plus 788 macOS `._` resource-fork twins, skipped); only 218 chip ids carry both files, from which 36 / 12 / 12 were drawn by block with a seeded hash, stratified by dominant class; all 13 classes occur in every role.
+- Executed 2026-09-20 on the local GPU, the smoke and sweep scripts: load 51.8 s (the 538 MB file read across the WSL filesystem bridge); the 120 pinned members streamed out of the tarball in 152.8 s; 12 test chips scored in 0.7 s once warm (the first forward pays a 30 s kernel warm-up on this GPU) — **majority-class baseline** (Corn) accuracy 0.1854, mean IoU 0.0143; **frozen model** mean IoU 0.4366, accuracy 0.6170, mean class accuracy 0.6605, mean F1 0.5897, per-class IoU Natural Vegetation 0.237, Forest 0.502, Corn 0.567, Soybeans 0.547, Wetlands 0.428, Developed/Barren 0.296, Open Water 0.705, Winter Wheat 0.596, Alfalfa 0.308, Fallow/Idle Cropland 0.459, Cotton 0.104, Sorghum 0.489, Other 0.438; validation mean IoU 0.403, accuracy 0.593. Adaptation sweep of the head (5,312,269 of 134,427,661 parameters, batch 4, flips, BatchNorm frozen, 6 epochs, 54 steps): lr 10⁻⁴ never lowered the validation loss (best epoch 0, the adapter is the frozen head); lr 10⁻⁵ lowered it 1.0663 → 1.0392 at epoch 2 (validation mean IoU 0.403 → 0.3975; test mean IoU 0.4366 → 0.4347, accuracy 0.6170 → 0.6116); lr 3 × 10⁻⁵ 1.0663 → 1.0399 at epoch 1 (test 0.4366 → 0.4290); `head+last_block` at lr 10⁻⁵ 1.0663 → 1.0404 at epoch 2 (test 0.4366 → 0.4327). Default chosen: `head`, lr 10⁻⁵, 4 epochs. Adapter 21,249,580 bytes (8 tensors); reload parity exact. One training step of the head takes 1.6 s at batch 4 on this GPU (the 3 × 3 convolution's weight gradient over 2304 channels dominates).
+- Executed 2026-09-20, the **generated notebook** run top-to-bottom by the local pre-flight harness in WSL (CPython 3.12.3, `torch 2.14.0+cu130`, CUDA, the Hub files, the converted safetensors and the tarball pre-staged, conversion already performed): 11/11 code cells, 582.8 s wall, PASS (the tarball hash, the adaptation and the evaluations dominate); probes refused (two-date chip, unknown label class, digital numbers out of range); test mean IoU 0.4366 → 0.4347, accuracy 0.6170 → 0.6116, mean class accuracy 0.6605 → 0.6633, best epoch 2 (validation loss 1.0663 → 1.0392), adaptation 258.2 s / 36 steps; adapter 21,249,580 bytes; reload parity exact. Pre-flight, **not** promotion evidence; the clean-runtime run is recorded in `docs/release-verification.md` and below.
+- Not executed: the CPU path end to end (chips take seconds each and the adaptation would take an hour), the `allow_download=True` path through the pipeline (the Hub download of the checkpoint and the tarball were exercised by the build with `huggingface_hub`), any published benchmark, and any measurement of latency or memory beyond the times above.
+
+## References
+
+- Jakubik, J., Roy, S., Phillips, C. E., Fraccaro, P., Godwin, D., Zadrozny, B., et al. (2023). Foundation models for generalist geospatial artificial intelligence. arXiv:2310.18660. https://arxiv.org/abs/2310.18660
+- Upstream fine-tuning code and configuration: https://github.com/NASA-IMPACT/hls-foundation-os (`geospatial_fm/geospatial_fm.py` and `configs/multi_temporal_crop_classification.py`); pinned Hub repository: https://huggingface.co/ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification
+- HLS multi-temporal crop classification dataset (NASA IMPACT / IBM, CC BY 4.0): https://huggingface.co/datasets/ibm-nasa-geospatial/multi-temporal-crop-classification
+- Contributors, M. (2020). MMSegmentation: OpenMMLab semantic segmentation toolbox and benchmark. https://github.com/open-mmlab/mmsegmentation (the head and training framework; not a dependency of this repository)
