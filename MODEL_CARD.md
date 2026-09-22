@@ -47,7 +47,7 @@ Per-pixel classification of 224 × 224 three-date HLS chips (six bands per date,
 
 ###### Primary Intended Users
 
-Researchers, students and engineers evaluating Prithvi-EO-1.0-based crop mapping on HLS data; DIMER operators publishing the model profile; DIMER maintainers who need a reproducible reference for the pickle-audit-and-convert recipe applied to an mmsegmentation checkpoint and for a network vendored without its training framework.
+Researchers, students and engineers evaluating Prithvi-EO-1.0-based crop mapping on HLS data; Operators publishing the model profile; Maintainers who need a reproducible reference for the pickle-audit-and-convert recipe applied to an mmsegmentation checkpoint and for a network vendored without its training framework.
 
 ###### Out-of-scope use cases
 
@@ -141,7 +141,7 @@ Tutorial and evaluation of Prithvi-EO-1.0 crop classification on HLS chips; a DI
 | Input contract | 224 × 224 chips of three dates × six HLS bands (blue, green, red, narrow NIR, SWIR 1, SWIR 2), date-major, as (3, 6, 224, 224) arrays or 18-band GeoTIFFs, in digital numbers (reflectance × 10 000); labels 0..12 / −1 for adaptation (files: 0 = no data, 1..13) |
 | Sample data | the dataset's `validation_chips.tgz` (CC BY 4.0) fetched at run time from the Hub at an immutable revision, 120 pinned members extracted, never vendored |
 
-**One thing is open, and it is neither the licence nor the code:** whether a one-time unpickle through torch's weights-only loader, after a static audit with a pinned digest and with three data-only names bound to stand-ins — in the build and in the tutorial runtime, where the notebook converts what it downloads — meets the DIMER bar, or whether DIMER should host only the safetensors converted and verified once by the maintainer. The served artifact is the same file either way.
+**One thing is open, and it is neither the licence nor the code:** whether a one-time unpickle through torch's weights-only loader, after a static audit with a pinned digest and with three data-only names bound to stand-ins — in the build and in the tutorial runtime, where the notebook converts what it downloads — meets the bar for redistribution, or whether only the safetensors converted and verified once by the maintainer should be published. The served artifact is the same file either way.
 
 ## Runtime
 
