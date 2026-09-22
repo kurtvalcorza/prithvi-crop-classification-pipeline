@@ -47,7 +47,7 @@ Per-pixel classification of 224 × 224 three-date HLS chips (six bands per date,
 
 ###### Primary Intended Users
 
-Researchers, students and engineers evaluating Prithvi-EO-1.0-based crop mapping on HLS data; DIMER operators publishing the model profile; maintainers of the fleet who need a reproducible reference for the pickle-audit-and-convert recipe applied to an mmsegmentation checkpoint and for a network vendored without its training framework.
+Researchers, students and engineers evaluating Prithvi-EO-1.0-based crop mapping on HLS data; DIMER operators publishing the model profile; DIMER maintainers who need a reproducible reference for the pickle-audit-and-convert recipe applied to an mmsegmentation checkpoint and for a network vendored without its training framework.
 
 ###### Out-of-scope use cases
 
