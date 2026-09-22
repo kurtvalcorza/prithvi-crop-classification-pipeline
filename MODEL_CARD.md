@@ -131,7 +131,7 @@ Tutorial and evaluation of Prithvi-EO-1.0 crop classification on HLS chips; a DI
 
 | Field | Status |
 |---|---|
-| **DIMER status** | **Planned / conditional** — the `.pth` asset-format and deserialization-trust review the fleet inventory requires is what this repository implements; the review's acceptance is Kurt's call |
+| **DIMER status** | **Planned / conditional** — the `.pth` asset-format and deserialization-trust review DIMER requires is what this repository implements; the review's acceptance is the maintainer's call |
 | Licence | Apache-2.0 (weights, the upstream `hls-foundation-os` code, and this repository's code) — use, modification, redistribution and commercial use permitted with the licence and notices preserved |
 | Weights | Would be redistributed converted, not unmodified: the served artifact is the deterministic safetensors derived from the pinned checkpoint, with both identities recorded (asset spec §11.2); this repository redistributes neither |
 | Remote code | **Not required** — no Hub-hosted module is imported and no mmcv / mmsegmentation is installed; the network is `modeling.py` in this repository |
