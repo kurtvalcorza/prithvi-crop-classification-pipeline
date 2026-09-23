@@ -43,7 +43,7 @@ What this repository adds is the `PrithviCropPipeline` class in `src/prithvi_cro
 
 ###### Primary Intended Uses
 
-Per-pixel classification of 224 × 224 three-date HLS chips (six bands per date, digital numbers) into the 13 Cropland-Data-Layer-derived classes the checkpoint was trained on, evaluation of that classification on labelled chips against a majority-class baseline, and bounded fine-tuning of the segmentation head to a user's labelled chips with a portable adapter — as a tutorial and evaluation contract for a DIMER model profile, and as the runtime that profile would serve. The default tutorial path downloads the checkpoint and the dataset tarball from the Hugging Face Hub at immutable revisions and nothing else.
+Per-pixel classification of 224 × 224 three-date HLS chips (six bands per date, digital numbers) into the 13 Cropland-Data-Layer-derived classes the checkpoint was trained on, evaluation of that classification on labelled chips against a majority-class baseline, and bounded fine-tuning of the segmentation head to a user's labelled chips with a portable adapter — as a tutorial and evaluation contract, and as the runtime a deployment of the converted checkpoint would use. The default tutorial path downloads the checkpoint and the dataset tarball from the Hugging Face Hub at immutable revisions and nothing else.
 
 ###### Primary Intended Users
 
@@ -101,7 +101,7 @@ A wrong band order, date order or scaling produces confident, plausible-looking,
 
 ###### Use cases
 
-Tutorial and evaluation of Prithvi-EO-1.0 crop classification on HLS chips; a DIMER model profile serving the converted checkpoint; a reference for auditing and converting mmsegmentation checkpoints and vendoring their networks; a starting point for fine-tuning the head on a user's labelled chips, with the caveats above.
+Tutorial and evaluation of Prithvi-EO-1.0 crop classification on HLS chips; a deployment serving the converted checkpoint; a reference for auditing and converting mmsegmentation checkpoints and vendoring their networks; a starting point for fine-tuning the head on a user's labelled chips, with the caveats above.
 
 ## Immutable provenance
 
@@ -127,21 +127,20 @@ Tutorial and evaluation of Prithvi-EO-1.0 crop classification on HLS chips; a DI
 - `audit_pickle(path, allowed=…)`, `restricted_load(path)`, `convert_model(path=None)`, `verify_converted(path=None)` and `build_model()` are the serialization primitives.
 - Constants: `BANDS` (6), `NUM_FRAMES = 3`, `MEANS`, `STDS` (per band, digital numbers), `REFLECTANCE_SCALE = 10000` (applied only to chips in [0, 1.5]), `VALUE_RANGE = (-2000, 20000)`, `IMAGE_SIZE = 224`, `NUM_CLASSES = 13`, `CLASS_NAMES`, `CLASS_WEIGHTS`, `IGNORE_INDEX = -1`, `MIN_RECORDS = 4`, `MAX_RECORDS = 2000`, `PARAMETER_COUNT = 134427661`, `STATE_TENSORS = 98`, `SOURCE_STATE_TENSORS = 112`, `META_GLOBALS`, `ADAPTATION_MODES = ("head", "head+last_block")`, `ARTIFACT_FORMAT = "org.valcorza.prithvi-crop-classification.adapter.v1"`, `TAR_SHA256`, `DATASET_REVISION`.
 
-## DIMER deployment notes
+## Deployment notes
 
 | Field | Status |
 |---|---|
-| **DIMER status** | **Planned / conditional** — the `.pth` asset-format and deserialization-trust review DIMER requires is what this repository implements; the review's acceptance is the maintainer's call |
 | Licence | Apache-2.0 (weights, the upstream `hls-foundation-os` code, and this repository's code) — use, modification, redistribution and commercial use permitted with the licence and notices preserved |
-| Weights | Would be redistributed converted, not unmodified: the served artifact is the deterministic safetensors derived from the pinned checkpoint, with both identities recorded (asset spec §11.2); this repository redistributes neither |
+| Weights | Redistributable only as the converted file, not the original: the deployable artifact is the deterministic safetensors derived from the pinned checkpoint, with both identities recorded; this repository redistributes neither |
 | Remote code | **Not required** — no Hub-hosted module is imported and no mmcv / mmsegmentation is installed; the network is `modeling.py` in this repository |
-| Executable serialization | One pickle, unpickled **once** at conversion through torch's weights-only loader after a digest check and a static audit, with three data-only `meta` globals bound to inert stand-ins; a DIMER profile should carry the safetensors file and never the `.pth` |
+| Executable serialization | One pickle, unpickled **once** at conversion through torch's weights-only loader after a digest check and a static audit, with three data-only `meta` globals bound to inert stand-ins; a deployment should load the safetensors file and never the `.pth` |
 | Runtime | `torch==2.14.0` + `tifffile` + `numpy` + `safetensors` + `huggingface-hub`; float16 autocast on CUDA; a GPU is advisable (a chip takes several seconds on CPU) |
-| Upload format | `prithvi-eo-1.0-100m-crop.safetensors` (537,722,508 bytes, SHA-256 `d1df8044…`); **the `.pth` file must not be uploaded** |
+| Deployable files | `prithvi-eo-1.0-100m-crop.safetensors` (537,722,508 bytes, SHA-256 `d1df8044…`); **the `.pth` file must not be deployed** |
 | Input contract | 224 × 224 chips of three dates × six HLS bands (blue, green, red, narrow NIR, SWIR 1, SWIR 2), date-major, as (3, 6, 224, 224) arrays or 18-band GeoTIFFs, in digital numbers (reflectance × 10 000); labels 0..12 / −1 for adaptation (files: 0 = no data, 1..13) |
 | Sample data | the dataset's `validation_chips.tgz` (CC BY 4.0) fetched at run time from the Hub at an immutable revision, 120 pinned members extracted, never vendored |
 
-**One thing is open, and it is neither the licence nor the code:** whether a one-time unpickle through torch's weights-only loader, after a static audit with a pinned digest and with three data-only names bound to stand-ins — in the build and in the tutorial runtime, where the notebook converts what it downloads — meets the bar for redistribution, or whether only the safetensors converted and verified once by the maintainer should be published. The served artifact is the same file either way.
+**Before deploying.** Conversion unpickles the source checkpoint once, through torch's weights-only loader after a static audit with a pinned digest, with three data-only names bound to stand-ins (the notebook converts what it downloads); a deployment that wants no unpickling at all should load only a safetensors file converted and verified once in advance. The deployable artifact is the same file either way.
 
 ## Runtime
 
