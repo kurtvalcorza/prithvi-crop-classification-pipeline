@@ -46,9 +46,24 @@ TEMPLATE = {
     "notebook_name": "prithvi_crop_classification_colab.ipynb",
     "profile": "E2E",
     "mode": "GUIDED",
+    # SWP-R (2026-10-05 fleet sweep): nothing is pip-installed into the notebook kernel. The fleet's uv isolated-environment
+    # mechanism (build_notebook.py/2.2): managed CPython, a size- and SHA-256-verified uv wheel, and a lock compiled from the
+    # pyproject pins with `uv pip compile pyproject.toml --python-version 3.12 --python-platform x86_64-manylinux_2_28
+    # --generate-hashes --only-binary :all: -o tutorials/requirements-colab.lock.txt` (uv 0.12.15).
+    "isolated_runtime": True,
+    "infrastructure_labels": True,
+    "managed_python": "3.12.12",
+    "uv": {
+        "version": "0.12.15",
+        "url": "https://files.pythonhosted.org/packages/1e/fd/432451d732917c49152a291de3ef171aa6b0f1a22d39780fb2c1f085ca4c/uv-0.12.15-py3-none-manylinux_2_17_x86_64.manylinux2014_x86_64.whl",
+        "bytes": 20081404,
+        "sha256": "aee9802f46bae436bd91751bb33ddeb379ef1596b5c19df193219d545d244b60",
+    },
+    "lock": "tutorials/requirements-colab.lock.txt",
     "run_all": (
-        "Selecting **Run all** in a fresh **GPU** runtime installs the pinned dependencies (torch, tifffile, numpy, safetensors, "
-        "huggingface-hub — no mmcv, mmsegmentation or timm: the network is carried in this notebook), stages and digest-verifies "
+        "Selecting **Run all** in a fresh **GPU** runtime builds an isolated environment from the hash-locked pins (torch, tifffile, "
+        "numpy, safetensors, huggingface-hub — no mmcv, mmsegmentation or timm: the network is carried in this notebook); nothing is "
+        "installed into the notebook's own Python, so no restart is needed and Run all completes in one pass. It then stages and digest-verifies "
         "the pinned Prithvi crop-classification checkpoint (1.68 GB) from the Hub, statically audits the mmsegmentation pickle "
         "against an allow-list, converts it once into safetensors with a pinned digest (keeping the 98 inference tensors and "
         "dropping the training-only auxiliary head and the optimizer state), rebuilds the network from the carried module and "
@@ -63,7 +78,8 @@ TEMPLATE = {
     ),
     "byod": (
         "After the tutorial workflow completes, set `USE_BYOD = True` in Section 4 and re-run from that cell to supply your own "
-        "labelled chips as a zip holding `pairs.csv` (columns `id`, `image`, `label`) beside 18-band 224 × 224 GeoTIFF chips "
+        "labelled chips — as `BYOD_PATH` (a path in the runtime, which works on Colab, Kaggle and Jupyter) or, when it is empty, "
+        "through the Colab upload dialog — as a zip (or folder) holding `pairs.csv` (columns `id`, `image`, `label`) beside 18-band 224 × 224 GeoTIFF chips "
         "(three dates × six HLS bands — blue, green, red, narrow NIR, SWIR 1, SWIR 2 — date-major, surface reflectance × 10 000) "
         "and single-band label rasters (0 = no data, 1..13 = the classes in the order the model uses); at least four chips with "
         "at least two classes. Your chips are split by seed into training, validation and test sets and flow through the same "
@@ -71,6 +87,32 @@ TEMPLATE = {
         "The expected schema, the ceilings and the privacy guidance are stated in the Prerequisites and in Section 4, and "
         "uploaded files stay inside this runtime. BYOD is optional and never part of the default path."
     ),
+    "guided": {
+        "opening": [
+            '**Who this notebook is for.** The intended audience is a learner who knows basic Python, has used Colab or Jupyter, and wants to see how a '
+            'multi-temporal Earth-observation model that names 13 crop and land-cover classes is evaluated and adapted honestly: how its class maps are scored per '
+            'class against the best constant map, what a bounded fine-tuning of its head does to a model selected on the very chips used here, and how the change '
+            'is exported and reloaded. No prior experience with Prithvi, mmsegmentation or remote sensing models is assumed; terms are explained where they first '
+            'matter and again in the **Glossary** at the end. A GPU runtime (T4 or better) is expected.\n\n**Input → Model → Output.**\n\n| | Classification | Bounded '
+            'fine-tuning |\n|---|---|---|\n| Input | 224 × 224 chips of three 2022 dates × six HLS bands (digital numbers) | labelled chips with 13 classes and −1 '
+            'for no data (36 training, 12 validation, 12 test, split by 4 × 4-chip block) |\n| Model | the Prithvi-EO-1.0 temporal ViT encoder (six blocks), a '
+            'transposed-convolution neck and an FCN head, carried in plain PyTorch and loaded from audited, converted safetensors | the same network; only the FCN '
+            'head (5.3 M parameters) is trained with the upstream class weights, encoder, neck and BatchNorm statistics stay frozen |\n| Output | a per-pixel class '
+            "map (0..12), softmax scores and class fractions; per-class IoU, mean IoU and accuracy beside the majority-class baseline | the adapted model's numbers "
+            "beside the frozen model's on the same held-out chips, and a 21 MB safetensors adapter that reloads with parity |\n\n**How to use this notebook.** Choose "
+            'a GPU runtime (**Runtime → Change runtime type → T4 GPU**), then **Runtime → Run all**. Run all completes in one pass: Section 1 installs nothing into '
+            "the notebook's own Python, so no restart is needed. Sections 1–3 are **infrastructure** — the isolated environment, the carried network and package, "
+            'and the audited model snapshot — and their cells are collapsed; you may run them without studying them. The learning path starts in Section 4. Form '
+            'fields (`# @param`) are the only values meant to be edited, and the defaults reproduce the recorded run. Before each principal result the notebook '
+            'asks you to **Predict**; after it come **What to notice** and a collapsible **Check your reasoning** with a worked answer from the recorded run (the '
+            'Kaggle Tesla T4 run of 20 September 2026 recorded in `docs/release-verification.md`). Every adaptation starts from the pinned base, so re-running '
+            'Section 6 with other settings is a fresh experiment. **Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your '
+            'predictions down is optional.\n\n**Roadmap:** 1–3 infrastructure → 4 the labelled chips, block split, validation and refusals *(evaluation practice)* → '
+            '5 the frozen model against the majority-class baseline *(core concept)* → 6 bounded fine-tuning of the segmentation head *(core concept)* → 7 the '
+            'held-out paired comparison *(evaluation practice)* → 8 class maps, export and fresh reload *(engineering)* → interpretation, troubleshooting, glossary '
+            'and your conclusion.'
+        ],
+    },
     "pipeline_class": "PrithviCropPipeline",
     "model_load": "PrithviCropPipeline.from_pretrained(weights_dir=WEIGHTS_DIR, device=('cuda' if torch.cuda.is_available() else 'cpu'), report=print)",
     "weights_key": "prithvi-eo-1.0-100m-crop",
@@ -119,7 +161,7 @@ TEMPLATE = {
         "- **Runtime:** a fresh supported **GPU** runtime (Google Colab T4 or better, or a Jupyter kernel with a CUDA GPU and Python 3.12): the network runs in float16 autocast and the default adaptation needs about 4 GB of GPU memory; on CPU one chip takes several seconds and the adaptation would take an hour. About 4.5 GB of disk is needed for the checkpoint, its conversion and the tarball.",
         "- **Knowledge:** what a multispectral surface-reflectance chip is (bands, dates, digital numbers, no-data), what a pixel-wise class map and an ignore class are, and how per-class IoU and mean IoU are read against a majority baseline.",
         "- **Executable serialization handled explicitly:** the pinned checkpoint is a pickle. It is digest-verified, statically audited against an allow-list (audit digest pinned) and unpickled **once** through torch's weights-only loader — with the three data-only numpy names of its `meta` record bound to inert stand-ins — to produce the safetensors the network is actually loaded from. No Hub-hosted Python module is imported and no mmsegmentation code runs; the network is the carried `modeling.py`.",
-        "- **Data contract:** a record is `{{id, image, label}}` — a (3, 6, 224, 224) array of three dates × six HLS bands in digital numbers (reflectance × 10 000; an array in [0, 1] is scaled) or an 18-band date-major GeoTIFF, and a (224, 224) mask with classes 0..12 and −1 for no data (or a GeoTIFF with 0 = no data, 1..13 = class). Validation is structural: nothing checks that the bands are the right six in the right order, that the three dates are growing-season dates, or that the label belongs to the chip.",
+        "- **Data contract:** a record is `{id, image, label}` — a (3, 6, 224, 224) array of three dates × six HLS bands in digital numbers (reflectance × 10 000; an array in [0, 1] is scaled) or an 18-band date-major GeoTIFF, and a (224, 224) mask with classes 0..12 and −1 for no data (or a GeoTIFF with 0 = no data, 1..13 = class). Validation is structural: nothing checks that the bands are the right six in the right order, that the three dates are growing-season dates, or that the label belongs to the chip.",
         "- **Privacy:** Do not upload confidential or restricted data to a hosted runtime unless you are authorized to process it there — field-level records tied to a producer or commercial imagery under licence are exactly that. The default path uploads nothing.",
         "- **External access (data):** besides the model snapshot, the default path fetches one pinned object — the 1.18 GB `validation_chips.tgz` of the Hugging Face dataset `ibm-nasa-geospatial/multi-temporal-crop-classification` at an immutable revision — over HTTPS, digest-verified before any member is read; the dataset is CC BY 4.0 (NASA IMPACT / IBM).",
     ],
@@ -141,22 +183,39 @@ TEMPLATE = {
                 "Look for: 36 / 12 / 12 chips with all 13 classes present in each role, the block ids per split, a written sample "
                 "pair (`outputs/{stem}_sample_chip.tif` + `_sample_label.tif`, the BYOD shape), and three refusal probes — a "
                 "two-date chip, a mask with an unknown class, a chip with digital numbers far outside range — each rejected before "
-                "the model runs. The tarball takes about a minute to fetch and two to stream."
+                "the model runs. The tarball takes about a minute to fetch and two to stream.\n\n"
+                "*Evaluation practice.* **Predict before running:** neighbouring chips share fields. Why are roles assigned per 4 × 4-chip "
+                "block rather than per chip, and what leakage can remain?"
             ),
             "code": (
                 "import json\n"
                 "import os\n"
                 "from pathlib import Path\n\n"
                 "import numpy as np\n\n"
-                "USE_BYOD = False  # @param {{type:\"boolean\"}}\n\n"
+                "USE_BYOD = False  # @param {{type:\"boolean\"}}\n"
+                "# A .zip or a folder already in the runtime (works on Colab, Kaggle and Jupyter); empty = the Colab upload dialog.\n"
+                "BYOD_PATH = ''  # @param {{type:\"string\"}}\n\n"
                 "os.makedirs('outputs', exist_ok=True)\n"
                 "if USE_BYOD:\n"
-                "    from google.colab import files\n"
-                "    uploaded = files.upload()\n"
-                "    file_name, payload = next(iter(uploaded.items()))\n"
-                "    byod_path = Path('work') / file_name\n"
-                "    byod_path.parent.mkdir(parents=True, exist_ok=True)\n"
-                "    byod_path.write_bytes(payload)\n"
+                "    if BYOD_PATH.strip():\n"
+                "        byod_path = Path(BYOD_PATH.strip()).expanduser()\n"
+                "        if not byod_path.exists():\n"
+                "            raise FileNotFoundError(f'BYOD_PATH {{BYOD_PATH!r}} does not exist (relative paths start at {{Path.cwd()}}): give a .zip or a folder holding pairs.csv and the GeoTIFF files.')\n"
+                "        file_name = byod_path.name\n"
+                "    else:\n"
+                "        try:\n"
+                "            from google.colab import files\n"
+                "        except ImportError:\n"
+                "            raise RuntimeError('USE_BYOD is True but BYOD_PATH is empty, and the upload dialog exists only in Google Colab: on Kaggle or Jupyter put the zip (or folder) in the runtime and set BYOD_PATH to its path.') from None\n"
+                "        uploaded = files.upload() or {{}}\n"
+                "        if len(uploaded) != 1:\n"
+                "            raise ValueError(f'Upload exactly one .zip file (received {{len(uploaded)}}; a cancelled dialog sends none): run this cell again.')\n"
+                "        file_name, payload = next(iter(uploaded.items()))\n"
+                "        if not file_name.lower().endswith('.zip'):\n"
+                "            raise ValueError(f'{{file_name}}: upload one .zip holding pairs.csv and the GeoTIFF files.')\n"
+                "        byod_path = Path('work') / file_name\n"
+                "        byod_path.parent.mkdir(parents=True, exist_ok=True)\n"
+                "        byod_path.write_bytes(payload)\n"
                 "    splits = split_dataset(load_byod_dataset(byod_path), seed=0)\n"
                 "    data_source = 'BYOD (' + file_name + ')'\n"
                 "else:\n"
@@ -187,6 +246,15 @@ TEMPLATE = {
         },
         {
             "md": (
+                '**What to notice:** 36 / 12 / 12 chips, `classes_present` (13 in every role), the largest classes per split, the block counts, and the three refusals.\n\n<details><summary>Check '
+                'your reasoning</summary>A field that spans two chips would otherwise appear in training and test, and the model would be rewarded for remembering it. '
+                'Blocks keep each 4 × 4 group of chips in one role, but two neighbouring blocks can still land in different roles, so this is a split by block, not by '
+                'region — leakage at block edges remains possible. The refusals (two dates, an unknown class, digital numbers far out of range) stop before any model '
+                'call and name the rule.</details>'
+            ),
+        },
+        {
+            "md": (
                 "## 5. The frozen model against the majority-class baseline\n\n"
                 "`pipe.predict` standardises each chip with the band statistics of the upstream training configuration and folds "
                 "the 18 channels exactly as the upstream data pipeline did (a plain reshape that the checkpoint learned — see the "
@@ -199,11 +267,19 @@ TEMPLATE = {
                 "Look for: a mean IoU near 0.44 and an accuracy near 0.59 on the test chips (in the build record 0.438 and 0.591, "
                 "against 0.011 and 0.137 for the majority class, Natural Vegetation; the model card reports a mean IoU of 0.427, an overall "
                 "accuracy of 60.6 % and a mean class accuracy of 64.1 % on the full validation split), with Open Water and Winter Wheat the easiest classes and Natural Vegetation and "
-                "Other the hardest. These are sample-sanity numbers on 12 chips, not the benchmark."
+                "Other the hardest. These are sample-sanity numbers on 12 chips, not the benchmark. If you re-run this cell after Section "
+                "6, it first puts the adapted head back to the pinned base, so *frozen* always means the packaged model.\n\n"
+                "**Predict before running:** the most frequent class covers about one pixel in seven. Will the packaged model's mean IoU "
+                "over 13 classes be closer to 0.1, 0.4 or 0.8?"
             ),
             "code": (
                 "import time\n\n"
                 "t0 = time.perf_counter()\n"
+                "# SWP-F: the frozen numbers are always the pinned base. On a re-run after Section 6 the adapted tensors are put back\n"
+                "# to the base first (then re-run Sections 6-8 in order); adapt() itself also starts from the base on every call.\n"
+                "restored_tensors = pipe.restore_base()\n"
+                "if restored_tensors:\n"
+                "    print({{'restored_pinned_base': len(restored_tensors), 'note': 'adapted tensors put back to the pinned base; re-run Sections 6-8 in order'}})\n"
                 "frozen_test = pipe.evaluate(test_records)\n"
                 "frozen_val = pipe.evaluate(val_records)\n"
                 "print({{'seconds': round(time.perf_counter() - t0, 1), 'metric': frozen_test['metric']}})\n"
@@ -222,6 +298,14 @@ TEMPLATE = {
         },
         {
             "md": (
+                '**What to notice:** `baseline_majority_test` (class, accuracy, mean IoU) beside `frozen_test`, the per-class IoU, and the per-chip dominant label '
+                'against prediction.\n\n<details><summary>Check your reasoning</summary>Near 0.4. In the recorded run the frozen test mean IoU was 0.4379 with accuracy '
+                '0.5905, against 0.011 and 0.137 for the majority class (Natural Vegetation). The per-class IoU explains the mean: Open Water and Winter Wheat are '
+                'easy, Natural Vegetation and Other are barely found. A single mean IoU hides that spread; read the per-class row.</details>'
+            ),
+        },
+        {
+            "md": (
                 "## 6. Bounded fine-tuning of the segmentation head\n\n"
                 "`pipe.adapt` trains the 8 tensors of the FCN head (5.3 M parameters — 4 % of the model) and nothing else: the "
                 "encoder and the neck are frozen (no gradient is stored for them), and the head's BatchNorm layer keeps its "
@@ -232,7 +316,11 @@ TEMPLATE = {
                 "the frozen model's validation loss and metrics; the epoch with the lowest validation loss is kept — which can be "
                 "epoch 0, since the packaged checkpoint was selected on the very split these chips come from.\n\n"
                 "Watch the validation loss: in the build record it fell from 0.937 to 0.911 over four epochs while the validation mean IoU slipped from 0.461 to 0.445 — the class-weighted loss and the mean IoU the checkpoint was selected by do not rank the same head, which is exactly why the kept epoch is chosen on the loss you declare and reported beside the metric you care about. Four epochs (36 steps) take a few minutes on a T4, the validation pass after each epoch included. "
-                "`TRAINABLE = 'head+last_block'` also unfreezes the last encoder block (7.1 M more parameters)."
+                "`TRAINABLE = 'head+last_block'` also unfreezes the last encoder block (7.1 M more parameters). Every call starts "
+                "from the pinned base (`started_from` in the printed result), so a re-run with other settings is a fresh experiment, "
+                "not continued training, and epoch 0 is always the frozen model.\n\n"
+                "**Predict before running:** the head is trained on the class-weighted loss. If the validation loss falls, will the "
+                "validation mean IoU rise with it?"
             ),
             "code": (
                 "EPOCHS = 4  # @param {{type:\"integer\"}}\n"
@@ -255,6 +343,14 @@ TEMPLATE = {
         },
         {
             "md": (
+                '**What to notice:** epoch 0 (`note: frozen model`), `val_loss` against `val_mean_iou` per epoch, `best_epoch`, and the trainable share.\n\n<details><summary>Check '
+                'your reasoning</summary>Not necessarily. In the recorded run the class-weighted validation loss fell from 0.9368 to 0.9114 and epoch 4 was kept, while '
+                'the validation mean IoU slipped from 0.4609 to 0.4451. The loss rewards getting rare, heavily weighted classes right; the mean IoU weighs every class '
+                'equally over pixels. Selection follows the loss you declare, so report the metric you care about beside it.</details>'
+            ),
+        },
+        {
+            "md": (
                 "## 7. Held-out evaluation: the paired comparison\n\n"
                 "The test chips were never used for training or epoch selection (their blocks were assigned to the test role "
                 "before anything ran). The adapted model is scored exactly as the frozen model was in Section 5, and the table "
@@ -262,7 +358,9 @@ TEMPLATE = {
                 "guarantees — the kept epoch's validation loss is no higher than the frozen model's, and re-scoring the validation "
                 "chips reproduces the kept epoch's mean IoU within 0.01 (float16 kernels are not bit-reproducible across batch "
                 "sizes) — and prints the test numbers without asserting a direction: on this sample the test mean IoU moved from 0.438 to 0.430 and the accuracy from 0.591 to 0.581 in the build record (the kept epoch lowered the class-weighted validation loss, not the mean IoU), a sample-sanity observation on 12 chips with no dispersion estimate, not a quality claim. With your own chips from "
-                "another region or year, the gap between frozen and adapted is the number to watch."
+                "another region or year, the gap between frozen and adapted is the number to watch.\n\n"
+                "*Evaluation practice.* **Predict before running:** given Section 6, will the test mean IoU of the adapted head be above "
+                "or below the frozen model's?"
             ),
             "code": (
                 "adapted_test = pipe.evaluate(test_records)\n"
@@ -291,6 +389,14 @@ TEMPLATE = {
                 "assert adapt_result['history'][adapt_result['best_epoch']]['val_loss'] <= adapt_result['history'][0]['val_loss']\n"
                 "assert abs(adapted_val['model']['mean_iou'] - adapt_result['history'][adapt_result['best_epoch']]['val']['mean_iou']) < 1e-2\n"
                 "print({{'report': 'outputs/{stem}_evaluation_report.json'}})"
+            ),
+        },
+        {
+            "md": (
+                '**What to notice:** the `mean_iou`, `mean_accuracy` and `accuracy` rows (baseline, frozen, adapted) and `per_class_iou_changes`.\n\n<details><summary>Check '
+                'your reasoning</summary>Slightly below. In the recorded run the test mean IoU moved from 0.4379 to 0.4302 and accuracy from 0.5905 to 0.5813, while '
+                'the mean class accuracy rose a hair (0.6239 → 0.6250) — consistent with a loss that favours rare classes. Twelve chips and one seed cannot resolve '
+                'differences this small; the frozen model was selected on this split, so no gain was expected.</details>'
             ),
         },
         {
@@ -363,6 +469,14 @@ TEMPLATE = {
                 "        print(f'  - {{path.as_posix()}} ({{path.stat().st_size / 1024:.1f}} KB)')"
             ),
         },
+        {
+            "md": (
+                "**What to notice:** the agreement of the two class maps with their references, the artifact's size and tensor count, and `reload_parity`.\n\n<details><summary>Check "
+                'your reasoning</summary>Agreement on two chips is a sanity check, not an evaluation: the maps can be opened beside the reference masks in any GIS. In '
+                'the recorded run the 8-tensor, 21 MB adapter reloaded into a fresh pipeline with identical held-out metrics (`mean_iou_diff` 0.0, `metrics_identical` '
+                'True, `max_abs_score_diff` 0.0).</details>'
+            ),
+        },
     ],
     "closing": (
         "## Interpretation and limits\n\n"
@@ -394,6 +508,40 @@ TEMPLATE = {
         "**Optional experiments (they do not affect the default path):** set `TRAINABLE = 'head+last_block'`; raise `EPOCHS` "
         "and watch the validation loss; try `LEARNING_RATE = 1e-4` to see the frozen model win every epoch; or bring your own "
         "labelled chips through BYOD and read the baseline before the adapted number.\n\n"
+        '## Troubleshooting\n\n- **Section 1 stops with "This notebook needs a Linux x86_64 runtime"** — you are on Windows, macOS or an ARM machine. Use Google '
+        'Colab, Kaggle or a Linux x86_64 Jupyter server.\n- **The uv wheel fails its size/SHA-256 check, or a download in Section 1 times out** — run Section 1 '
+        'again; a complete environment built from the same lock is reused, an incomplete one is finished. If it repeats, the network is blocking or altering '
+        '`files.pythonhosted.org` or `pypi.org`.\n- **"The isolated environment\'s Python process exited"** — usually out of memory. Restart the session and '
+        'choose **Run all**.\n- **You re-ran Section 1 on its own** — nothing is lost: it keeps the running worker and every variable, so the cells after it '
+        'keep working. After a session restart, run from the top.\n- **Section 3 reports a size or SHA-256 mismatch, or cannot reach the Hub** — the message '
+        'names the file. Delete it from the snapshot folder Section 3 prints and run Section 3 again.\n- **Section 3 stops during the pickle audit or '
+        'conversion** — the audit refuses any global outside the allow-list and names it; the downloaded checkpoint is not the pinned one. Delete the snapshot '
+        "folder and run Section 3 again.\n- **Section 4 stops on the tarball's size or SHA-256** — the 1.18 GB download was cut short or altered. Run Section 4 "
+        'again; chips already extracted and verified are reused. If the digest still fails, delete `weights/multi-temporal-crop/` and run it once more.\n- '
+        "**CUDA out of memory in Section 6** — another notebook holds the GPU, or `TRAINABLE = 'head+last_block'` with a larger `BATCH_SIZE` exceeds a T4. "
+        'Restart the session, keep `BATCH_SIZE = 4`, and choose **Run all**.\n- **Section 5 prints `restored_pinned_base`** — you re-ran it after Section 6; the '
+        'adapted head was put back to the base. Re-run Sections 6–8 in order.\n- **BYOD: a band, date, shape or label refusal** — the message names the rule; '
+        'chips must be 18-band 224 × 224 GeoTIFFs (three dates × six bands, date-major, digital numbers) with masks of 0 = no data and 1..13 = class, and at '
+        'least four chips need two classes.\n- **BYOD: "BYOD_PATH … does not exist"** — the path is relative to the working directory printed in the message.\n- '
+        '**BYOD: "the upload dialog exists only in Google Colab"** — on Kaggle or Jupyter, put the zip (or folder) in the runtime and set `BYOD_PATH` to its path.\n- '
+        '**BYOD: "Upload exactly one .zip file"** — the dialog was cancelled or several files were chosen; run the cell again.\n\n## Glossary\n\n- **HLS '
+        "(Harmonized Landsat Sentinel-2):** NASA's surface-reflectance product on one 30 m grid; the six bands here are blue, green, red, narrow NIR, SWIR 1 "
+        'and SWIR 2.\n- **Multi-temporal chip:** the same 224 × 224 area at three dates of one growing season; crops are told apart by how they change over the season.\n- '
+        "**Digital numbers:** reflectance × 10 000 stored as integers, the scale the model's band statistics expect.\n- **Cropland Data Layer (CDL):** the "
+        "USDA's annual crop map, from which the 13 labels were derived; it has its own errors at field edges.\n- **Class map / ignore class:** one class per "
+        'pixel; −1 (0 in the GeoTIFFs) marks no-data pixels that are excluded from training and scoring.\n- **Majority-class baseline:** naming every pixel with '
+        'the most frequent class; the best any constant map can do.\n- **Per-class IoU, mean IoU, mean class accuracy:** overlap of predicted and true pixels '
+        'for one class; its average over the classes present; the average per-class recall.\n- **Class weights:** the upstream loss counts rare classes up to 9× '
+        'more than common ones.\n- **Encoder, neck, head:** the temporal ViT that turns patches into features; the transposed convolutions that fold the dates '
+        'and upsample; the FCN layer that names each pixel.\n- **Frozen / adapted / pinned base:** the packaged model; the model after Section 6; the verified '
+        'packaged weights every adaptation starts from (`restore_base`).\n- **Block split:** roles assigned per 4 × 4-chip block so chips of one block never '
+        'straddle training and test.\n- **Pickle audit / safetensors:** the upstream checkpoint is a pickle that could run code when loaded; it is statically '
+        'checked against an allow-list and converted once to safetensors, a format that stores only tensors.\n- **Isolated environment:** the separate Python '
+        'environment Section 1 builds from the hash lock; every later cell runs there.\n\n## Conclusion (your notes)\n\nComplete these in your own words; the '
+        "recorded run's values are in the **Check your reasoning** answers above.\n\n- The frozen model's test mean IoU was ___ against the majority-class "
+        "baseline's ___; the easiest and hardest classes were ___ and ___.\n- Head fine-tuning lowered the validation loss but moved the test mean IoU to ___, "
+        'which I read as ___.\n- The number I would not trust on its own is ___, because ___.\n- Before adapting on my own chips I would check the band and date '
+        'order, split by ___, and read ___ first.\n\n'
         "## References\n\n"
         "- Repository README: https://github.com/kurtvalcorza/prithvi-crop-classification-pipeline/blob/main/README.md\n"
         "- Repository model card: https://github.com/kurtvalcorza/prithvi-crop-classification-pipeline/blob/main/MODEL_CARD.md\n"
