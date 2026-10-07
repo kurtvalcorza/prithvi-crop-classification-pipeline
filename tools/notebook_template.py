@@ -81,9 +81,12 @@ TEMPLATE = {
         "labelled chips — as `BYOD_PATH` (a path in the runtime, which works on Colab, Kaggle and Jupyter) or, when it is empty, "
         "through the Colab upload dialog — as a zip (or folder) holding `pairs.csv` (columns `id`, `image`, `label`) beside 18-band 224 × 224 GeoTIFF chips "
         "(three dates × six HLS bands — blue, green, red, narrow NIR, SWIR 1, SWIR 2 — date-major, surface reflectance × 10 000) "
-        "and single-band label rasters (0 = no data, 1..13 = the classes in the order the model uses); at least four chips with "
-        "at least two classes. Your chips are split by seed into training, validation and test sets and flow through the same "
-        "contract — validation, frozen baseline, adaptation, held-out evaluation, class maps, artifact export and reload parity. "
+        "and single-band label rasters (0 = no data, 1..13 = the classes in the order the model uses); at least **7** labelled chips with "
+        "at least two classes (the seeded 25 % test / 20 % validation split must leave the 4 training chips adaptation needs; Section 4 prints the minimum and "
+        "refuses a smaller set by name). An optional `group` column (a field, scene or region id) keeps every chip of one group in one role, so neighbouring "
+        "chips of one field cannot sit on both sides of the split. Your chips flow through the same "
+        "contract — validation, frozen baseline, adaptation, held-out evaluation, class maps, artifact export and reload parity — and Section 5 puts the model "
+        "back to the pinned base first, so the frozen numbers on your chips are the packaged model's. "
         "The expected schema, the ceilings and the privacy guidance are stated in the Prerequisites and in Section 4, and "
         "uploaded files stay inside this runtime. BYOD is optional and never part of the default path."
     ),
@@ -109,7 +112,7 @@ TEMPLATE = {
             'Section 6 with other settings is a fresh experiment. **Troubleshooting**, a **Glossary** and a **Conclusion** template are at the end. Writing your '
             'predictions down is optional.\n\n**Roadmap:** 1–3 infrastructure → 4 the labelled chips, block split, validation and refusals *(evaluation practice)* → '
             '5 the frozen model against the majority-class baseline *(core concept)* → 6 bounded fine-tuning of the segmentation head *(core concept)* → 7 the '
-            'held-out paired comparison *(evaluation practice)* → 8 class maps, export and fresh reload *(engineering)* → interpretation, troubleshooting, glossary '
+            'held-out paired comparison with per-chip numbers *(evaluation practice)* → 8 class maps shown inline, export and fresh reload *(engineering)* → interpretation, an optional experiment, troubleshooting, glossary '
             'and your conclusion.'
         ],
     },
@@ -184,6 +187,10 @@ TEMPLATE = {
                 "pair (`outputs/{stem}_sample_chip.tif` + `_sample_label.tif`, the BYOD shape), and three refusal probes — a "
                 "two-date chip, a mask with an unknown class, a chip with digital numbers far outside range — each rejected before "
                 "the model runs. The tarball takes about a minute to fetch and two to stream.\n\n"
+                "For your own chips the same advice applies and the `group` column of `pairs.csv` applies it: give every chip a field, scene or region id and "
+                "`split_dataset` keeps every chip of one group in one role (the cell reports `grouped_split`); without the column the split is a seeded shuffle by "
+                "chip, and neighbouring chips of one field can land on both sides. The exported `pairs.csv` of the sample carries the block id in that column. "
+                "The smallest BYOD dataset the split accepts is 7 distinct labelled chips (the cell prints it as `minimum_chips`).\n\n"
                 "*Evaluation practice.* **Predict before running:** neighbouring chips share fields. Why are roles assigned per 4 × 4-chip "
                 "block rather than per chip, and what leakage can remain?"
             ),
@@ -216,7 +223,10 @@ TEMPLATE = {
                 "        byod_path = Path('work') / file_name\n"
                 "        byod_path.parent.mkdir(parents=True, exist_ok=True)\n"
                 "        byod_path.write_bytes(payload)\n"
-                "    splits = split_dataset(load_byod_dataset(byod_path), seed=0)\n"
+                "    byod_records = load_byod_dataset(byod_path)\n"
+                "    byod_grouped = bool(byod_records) and all(r.get('group') for r in byod_records)\n"
+                "    splits = split_dataset(byod_records, seed=0)\n"
+                "    print({{'byod_chips': len(byod_records), 'minimum_chips': byod_minimum_records(), 'grouped_split': byod_grouped, 'groups': sorted({{r['group'] for r in byod_records}}) if byod_grouped else 'no group column: chips of one field or scene may land in different roles'}})\n"
                 "    data_source = 'BYOD (' + file_name + ')'\n"
                 "else:\n"
                 "    splits = fetch_sample_dataset(cache_dir='weights/multi-temporal-crop')\n"
@@ -231,10 +241,12 @@ TEMPLATE = {
                 "sample_pair = write_sample_pair(test_records[0], 'outputs/{stem}_sample_chip.tif', 'outputs/{stem}_sample_label.tif')\n"
                 "print({{'sample_pair': sample_pair, 'pairs_csv': str(write_dataset_csv(test_records, 'outputs/{stem}_sample_pairs.csv'))}})\n\n"
                 "print({{'validation': INPUT_SCHEMA['validation']}})\n"
+                "# CR-m1: pad each probe to the dataset minimum from the other roles, so a small BYOD set still fails on the intended check.\n"
+                "probe_fill = (test_records[1:] + train_records + val_records)[:MIN_RECORDS - 1]\n"
                 "probes = {{\n"
-                "    'two-date chip': [{{**test_records[0], 'image': test_records[0]['image'][:2]}}, *test_records[1:4]],\n"
-                "    'unknown label class': [{{**test_records[0], 'label': np.where(test_records[0]['label'] == 2, 13, test_records[0]['label'])}}, *test_records[1:4]],\n"
-                "    'digital numbers out of range': [{{**test_records[0], 'image': test_records[0]['image'] * 50.0}}, *test_records[1:4]],\n"
+                "    'two-date chip': [{{**test_records[0], 'image': test_records[0]['image'][:2]}}, *probe_fill],\n"
+                "    'unknown label class': [{{**test_records[0], 'label': np.where(test_records[0]['label'] == 2, 13, test_records[0]['label'])}}, *probe_fill],\n"
+                "    'digital numbers out of range': [{{**test_records[0], 'image': test_records[0]['image'] * 50.0}}, *probe_fill],\n"
                 "}}\n"
                 "for name, records in probes.items():\n"
                 "    try:\n"
@@ -263,7 +275,11 @@ TEMPLATE = {
                 "per chip. `pipe.evaluate` pools the labelled pixels of every held-out chip into one 13 × 13 confusion matrix "
                 "(−1 pixels excluded) and reports the per-class IoU and recall, the mean IoU and mean class accuracy over the "
                 "classes present, the mean F1 and the overall accuracy; the **majority-class baseline** — every pixel named with "
-                "the most frequent class of the scored labels, the best any constant map can do — is scored on the same pixels.\n\n"
+                "the most frequent class of the scored labels, the best any constant map can do — is scored on the same pixels. "
+                "The decision rule is the argmax over the 13 class scores, and it is a default, not a tuned operating point: any minimum-confidence rule, "
+                "class-specific threshold or post-processing (majority filtering, field-level voting) is the deployment's to set on its own validation data, "
+                "and the deployment owns the calibration of the scores; this notebook sets none of them. The cell also prints the mean IoU and accuracy "
+                "**per chip**, because the pooled numbers let large fields dominate.\n\n"
                 "Look for: a mean IoU near 0.44 and an accuracy near 0.59 on the test chips (in the build record 0.438 and 0.591, "
                 "against 0.011 and 0.137 for the majority class, Natural Vegetation; the model card reports a mean IoU of 0.427, an overall "
                 "accuracy of 60.6 % and a mean class accuracy of 64.1 % on the full validation split), with Open Water and Winter Wheat the easiest classes and Natural Vegetation and "
@@ -288,11 +304,16 @@ TEMPLATE = {
                 "print({{'frozen_test_iou': frozen_test['model']['iou']}})\n"
                 "print({{'frozen_validation': {{k: frozen_val['model'][k] for k in ('mean_iou', 'accuracy')}}}})\n"
                 "frozen_predictions = pipe.predict(test_records)\n"
-                "for record, pred in list(zip(test_records, frozen_predictions['predictions']))[:6]:\n"
+                "# CR-M2: BYOD records carry id / image / label only; source_id and region (block) exist for the sample alone.\n"
+                "chip_name = lambda record: record.get('source_id', record['id'])\n"
+                "frozen_per_chip = per_chip_metrics([p['mask'] for p in frozen_predictions['predictions']], [r['label'] for r in test_records], class_names=CLASS_NAMES, ignore_index=IGNORE_INDEX, ids=[chip_name(r) for r in test_records])\n"
+                "for record, pred, row in list(zip(test_records, frozen_predictions['predictions'], frozen_per_chip))[:6]:\n"
                 "    labelled = record['label'] >= 0\n"
                 "    dominant = CLASS_NAMES[int(np.bincount(record['label'][labelled], minlength=NUM_CLASSES).argmax())]\n"
                 "    predicted = max(pred['class_fraction'], key=pred['class_fraction'].get)\n"
-                "    print({{'chip': record['source_id'], 'block': record['region'], 'dominant_label': dominant, 'dominant_prediction': predicted, 'agreement': round(float((pred['mask'] == record['label'])[labelled].mean()), 3)}})\n"
+                "    print({{'chip': chip_name(record), 'block': record.get('region', '—'), 'dominant_label': dominant, 'dominant_prediction': predicted, 'agreement': round(float((pred['mask'] == record['label'])[labelled].mean()), 3), 'mean_iou': row['mean_iou']}})\n"
+                "frozen_iou_range = [row['mean_iou'] for row in frozen_per_chip]\n"
+                "print({{'per_chip_mean_iou_frozen': {{'min': min(frozen_iou_range), 'max': max(frozen_iou_range), 'n_chips': len(frozen_iou_range)}}}})\n"
                 "print({{'decision_rule': frozen_predictions['decision_rule'], 'scores_shape': frozen_predictions['predictions'][0]['scores'].shape}})"
             ),
         },
@@ -307,15 +328,16 @@ TEMPLATE = {
         {
             "md": (
                 "## 6. Bounded fine-tuning of the segmentation head\n\n"
-                "`pipe.adapt` trains the 8 tensors of the FCN head (5.3 M parameters — 4 % of the model) and nothing else: the "
+                "`pipe.adapt` trains the 5 trainable tensors of the FCN head (5.3 M parameters — 4 % of the model) and nothing else: the "
                 "encoder and the neck are frozen (no gradient is stored for them), and the head's BatchNorm layer keeps its "
-                "running statistics, because batches of four chips would corrupt them. Each step takes four chips with a seeded "
+                "running statistics (its three buffers are not trained, which is why the exported adapter holds 5 tensors, not the head's 8 state-dict entries), "
+                "because batches of four chips would corrupt them. Each step takes four chips with a seeded "
                 "horizontal or vertical flip, computes the cross-entropy over the labelled pixels (−1 ignored) with the upstream "
                 "class weights (rare classes such as Open Water and Sorghum count up to 9× more than Natural Vegetation) and takes "
                 "an AdamW step at a small fixed learning rate with gradient-norm clipping and float16 loss scaling. Epoch 0 records "
                 "the frozen model's validation loss and metrics; the epoch with the lowest validation loss is kept — which can be "
                 "epoch 0, since the packaged checkpoint was selected on the very split these chips come from.\n\n"
-                "Watch the validation loss: in the build record it fell from 0.937 to 0.911 over four epochs while the validation mean IoU slipped from 0.461 to 0.445 — the class-weighted loss and the mean IoU the checkpoint was selected by do not rank the same head, which is exactly why the kept epoch is chosen on the loss you declare and reported beside the metric you care about. Four epochs (36 steps) take a few minutes on a T4, the validation pass after each epoch included. "
+                "Watch the validation loss: in the build record it fell from 0.937 to 0.911 over four epochs while the validation mean IoU slipped from 0.461 to 0.445 — the class-weighted loss and the mean IoU the checkpoint was selected by do not rank the same head, which is exactly why the kept epoch is chosen on the loss you declare and reported beside the metric you care about. Four epochs (36 steps) take a few minutes on a T4, the validation pass after each epoch included; the cell prints the peak GPU memory it used. "
                 "`TRAINABLE = 'head+last_block'` also unfreezes the last encoder block (7.1 M more parameters). Every call starts "
                 "from the pinned base (`started_from` in the printed result), so a re-run with other settings is a fresh experiment, "
                 "not continued training, and epoch 0 is always the frozen model.\n\n"
@@ -338,7 +360,8 @@ TEMPLATE = {
                 "t0 = time.perf_counter()\n"
                 "adapt_result = pipe.adapt(train_records, val_records, epochs=EPOCHS, lr=LEARNING_RATE, batch_size=BATCH_SIZE, trainable=TRAINABLE, progress=report)\n"
                 "adapt_seconds = round(time.perf_counter() - t0, 1)\n"
-                "print({{'trainable_parameters': adapt_result['n_trainable'], 'total_parameters': adapt_result['n_total'], 'steps': adapt_result['n_steps'], 'best_epoch': adapt_result['best_epoch'], 'loss': adapt_result['loss'], 'precision': adapt_result['precision'], 'batchnorm': adapt_result['batchnorm'], 'seconds': adapt_seconds}})"
+                "adapt_result['gpu_peak_gb'] = round(torch.cuda.max_memory_allocated() / 2**30, 2) if torch.cuda.is_available() else None\n"
+                "print({{'trainable_parameters': adapt_result['n_trainable'], 'total_parameters': adapt_result['n_total'], 'steps': adapt_result['n_steps'], 'best_epoch': adapt_result['best_epoch'], 'loss': adapt_result['loss'], 'precision': adapt_result['precision'], 'batchnorm': adapt_result['batchnorm'], 'seconds': adapt_seconds, 'gpu_peak_gb': adapt_result['gpu_peak_gb']}})"
             ),
         },
         {
@@ -358,9 +381,11 @@ TEMPLATE = {
                 "guarantees — the kept epoch's validation loss is no higher than the frozen model's, and re-scoring the validation "
                 "chips reproduces the kept epoch's mean IoU within 0.01 (float16 kernels are not bit-reproducible across batch "
                 "sizes) — and prints the test numbers without asserting a direction: on this sample the test mean IoU moved from 0.438 to 0.430 and the accuracy from 0.591 to 0.581 in the build record (the kept epoch lowered the class-weighted validation loss, not the mean IoU), a sample-sanity observation on 12 chips with no dispersion estimate, not a quality claim. With your own chips from "
-                "another region or year, the gap between frozen and adapted is the number to watch.\n\n"
+                "another region or year, the gap between frozen and adapted is the number to watch — and in a BYOD run *frozen* is the packaged model, "
+                "because Section 5 restored the pinned base before scoring it. The cell also prints the adapted model's mean IoU per chip beside the frozen "
+                "model's, so a change hidden by the pooled number is visible.\n\n"
                 "*Evaluation practice.* **Predict before running:** given Section 6, will the test mean IoU of the adapted head be above "
-                "or below the frozen model's?"
+                "or below the frozen model's — and which class will move most?"
             ),
             "code": (
                 "adapted_test = pipe.evaluate(test_records)\n"
@@ -372,6 +397,13 @@ TEMPLATE = {
                 "    print({{key: row}})\n"
                 "moved = {{name: (frozen_test['model']['iou'][name], adapted_test['model']['iou'][name]) for name in CLASS_NAMES if frozen_test['model']['iou'][name] != adapted_test['model']['iou'][name]}}\n"
                 "print({{'per_class_iou_changes': moved if moved else 'none (the kept epoch is the frozen model)'}})\n"
+                "# CR-S5: per-chip mean IoU, frozen beside adapted (the pooled metric lets large fields dominate).\n"
+                "adapted_predictions = pipe.predict(test_records)\n"
+                "adapted_per_chip = per_chip_metrics([p['mask'] for p in adapted_predictions['predictions']], [r['label'] for r in test_records], class_names=CLASS_NAMES, ignore_index=IGNORE_INDEX, ids=[chip_name(r) for r in test_records])\n"
+                "for f_row, a_row in zip(frozen_per_chip, adapted_per_chip):\n"
+                "    print({{'chip': f_row['id'], 'frozen_mean_iou': f_row['mean_iou'], 'adapted_mean_iou': a_row['mean_iou'], 'classes_scored': a_row['classes_scored']}})\n"
+                "comparison['per_chip_mean_iou_range'] = {{'frozen': [min(r['mean_iou'] for r in frozen_per_chip), max(r['mean_iou'] for r in frozen_per_chip)], 'adapted': [min(r['mean_iou'] for r in adapted_per_chip), max(r['mean_iou'] for r in adapted_per_chip)]}}\n"
+                "print({{'per_chip_mean_iou_range': comparison['per_chip_mean_iou_range']}})\n"
                 "print({{'validation_mean_iou': {{'frozen': frozen_val['model']['mean_iou'], 'adapted': adapted_val['model']['mean_iou']}}, 'validation_loss': {{'frozen': adapt_result['history'][0]['val_loss'], 'kept_epoch': adapt_result['history'][adapt_result['best_epoch']]['val_loss']}}}})\n"
                 "evaluation_report = {{\n"
                 "    'model': {{'id': MODEL_ID, 'revision': MODEL_REVISION, 'key': MODEL_KEY}},\n"
@@ -379,6 +411,7 @@ TEMPLATE = {
                 "    'dataset': dataset_report,\n"
                 "    'frozen': {{'test': frozen_test, 'validation': frozen_val}},\n"
                 "    'adapted': {{'test': adapted_test, 'validation': adapted_val}},\n"
+                "    'per_chip': {{'frozen': frozen_per_chip, 'adapted': adapted_per_chip}},\n"
                 "    'comparison': comparison,\n"
                 "    'adaptation': {{k: v for k, v in adapt_result.items() if k not in ('history', 'trainable_names')}},\n"
                 "    'history': adapt_result['history'],\n"
@@ -393,9 +426,11 @@ TEMPLATE = {
         },
         {
             "md": (
-                '**What to notice:** the `mean_iou`, `mean_accuracy` and `accuracy` rows (baseline, frozen, adapted) and `per_class_iou_changes`.\n\n<details><summary>Check '
-                'your reasoning</summary>Slightly below. In the recorded run the test mean IoU moved from 0.4379 to 0.4302 and accuracy from 0.5905 to 0.5813, while '
-                'the mean class accuracy rose a hair (0.6239 → 0.6250) — consistent with a loss that favours rare classes. Twelve chips and one seed cannot resolve '
+                '**What to notice:** the `mean_iou`, `mean_accuracy` and `accuracy` rows (baseline, frozen, adapted), `per_class_iou_changes`, and the per-chip range.\n\n<details><summary>Check '
+                'your reasoning</summary>Slightly below, and the majority class moved most. In the recorded run the test mean IoU moved from 0.4379 to 0.4302 and accuracy from 0.5905 to 0.5813, while '
+                'the mean class accuracy rose a hair (0.6239 → 0.6250). Underneath, Natural Vegetation — the most frequent class — lost a quarter of its IoU (0.2494 → 0.1884) '
+                'while Fallow/Idle Cropland gained (0.3229 → 0.3784) and Cotton slipped (0.432 → 0.399): the class-weighted loss, which counts rare classes up to 9× more, traded '
+                'the common class for rarer ones, which is what it is built to do and what the per-class row is for. Twelve chips and one seed cannot resolve '
                 'differences this small; the frozen model was selected on this split, so no gain was expected.</details>'
             ),
         },
@@ -403,8 +438,11 @@ TEMPLATE = {
             "md": (
                 "## 8. Class maps, artifact export and fresh reload\n\n"
                 "The adapted model's class maps of two held-out chips are written as single-band GeoTIFFs in the dataset's label "
-                "convention (0 = no data, 1..13 = class) beside the reference masks, so they can be opened side by side: the "
-                "agreement per chip printed here is a sanity check, not an evaluation.\n\n"
+                "convention (0 = no data, 1..13 = class) beside the reference masks, and **shown inline**: for each chip one strip — a SWIR 2 / NIR / red "
+                "composite of the middle date, the reference map (black = no data), the frozen class map and the adapted class map, in a fixed 13-colour "
+                "palette whose legend is printed under the strip (`class_map_panel` + `render_png`, no plotting library). Look at where the frozen and adapted "
+                "maps differ and whether those pixels moved towards the reference; the agreement per chip printed here is a sanity check, not an evaluation. "
+                "The strips are also written as `outputs/{stem}_maps_<chip>.png`.\n\n"
                 "`pipe.save_artifact` writes the trained tensors (about 21 MB) as `adapter.safetensors`, with a `manifest.json` "
                 "recording the artifact format, the base model id and revision, the digest of the converted base file, the "
                 "adaptation scope, the tensor names, the file size and SHA-256, the training configuration and the epoch history "
@@ -419,11 +457,20 @@ TEMPLATE = {
                 "import tifffile\n\n"
                 "shown_records = test_records[:2]\n"
                 "shown_predictions = pipe.predict(shown_records)\n"
-                "for record, pred in zip(shown_records, shown_predictions['predictions']):\n"
-                "    tifffile.imwrite(f'outputs/{stem}_map_adapted_' + record['source_id'] + '.tif', (pred['mask'].astype(np.int64) + 1).astype(np.uint8))\n"
-                "    tifffile.imwrite(f'outputs/{stem}_map_reference_' + record['source_id'] + '.tif', np.where(record['label'] < 0, 0, record['label'] + 1).astype(np.uint8))\n"
+                "# CR-M2: chip_name() works for sample and BYOD records alike. CR-m4: the maps are shown inline, not only written.\n"
+                "for record, pred, frozen_pred in zip(shown_records, shown_predictions['predictions'], frozen_predictions['predictions']):\n"
+                "    name = chip_name(record)\n"
+                "    tifffile.imwrite(f'outputs/{stem}_map_adapted_' + name + '.tif', (pred['mask'].astype(np.int64) + 1).astype(np.uint8))\n"
+                "    tifffile.imwrite(f'outputs/{stem}_map_reference_' + name + '.tif', np.where(record['label'] < 0, 0, record['label'] + 1).astype(np.uint8))\n"
                 "    labelled = record['label'] >= 0\n"
-                "    print({{'chip': record['source_id'], 'agreement': round(float((pred['mask'] == record['label'])[labelled].mean()), 3), 'largest_predicted': max(pred['class_fraction'], key=pred['class_fraction'].get), 'note': 'sanity check on two chips'}})\n"
+                "    print({{'chip': name, 'agreement': round(float((pred['mask'] == record['label'])[labelled].mean()), 3), 'largest_predicted': max(pred['class_fraction'], key=pred['class_fraction'].get), 'note': 'sanity check on two chips'}})\n"
+                "    panel = class_map_panel(record, frozen_pred['mask'], pred['mask'])\n"
+                "    png = render_png(panel['rgb'])\n"
+                "    with open(f'outputs/{stem}_maps_' + name + '.png', 'wb') as f:\n"
+                "        f.write(png)\n"
+                "    print({{'chip': name, 'panels': panel['panels']}})\n"
+                "    display(PngImage(png, caption=name))\n"
+                "print({{'legend': {{entry['class']: 'rgb' + str(tuple(entry['rgb'])) for entry in panel['legend']}}}})\n"
                 "with open('outputs/{stem}_predictions.json', 'w', encoding='utf-8') as f:\n"
                 "    json.dump({{'model': shown_predictions['model'], 'classes': shown_predictions['classes'], 'decision_rule': shown_predictions['decision_rule'], 'predictions': [{{'id': p['id'], 'class_fraction': p['class_fraction']}} for p in shown_predictions['predictions']]}}, f, indent=2)\n\n"
                 "artifact_dir = Path('outputs/{stem}_adapter')\n"
@@ -458,6 +505,7 @@ TEMPLATE = {
                 "    'runtime': {{'python': platform.python_version(), 'torch': torch.__version__, 'tifffile': tifffile.__version__, 'numpy': np.__version__}},\n"
                 "    'data_source': data_source,\n"
                 "    'comparison': comparison,\n"
+                "    'adaptation_gpu_peak_gb': adapt_result['gpu_peak_gb'],\n"
                 "    'artifact': {{'dir': str(artifact_dir), 'sha256': artifact_manifest['files'][0]['sha256'], 'bytes': artifact_manifest['files'][0]['bytes']}},\n"
                 "    'reload_parity': parity,\n"
                 "}}\n"
@@ -471,9 +519,9 @@ TEMPLATE = {
         },
         {
             "md": (
-                "**What to notice:** the agreement of the two class maps with their references, the artifact's size and tensor count, and `reload_parity`.\n\n<details><summary>Check "
-                'your reasoning</summary>Agreement on two chips is a sanity check, not an evaluation: the maps can be opened beside the reference masks in any GIS. In '
-                'the recorded run the 8-tensor, 21 MB adapter reloaded into a fresh pipeline with identical held-out metrics (`mean_iou_diff` 0.0, `metrics_identical` '
+                "**What to notice:** in each strip, where the frozen and adapted maps differ and whether those pixels agree with the reference; the agreement of the two class maps with their references; the artifact's size and tensor count; and `reload_parity`.\n\n<details><summary>Check "
+                'your reasoning</summary>Agreement on two chips is a sanity check, not an evaluation: the strips show the shape of the errors (field edges, the classes the model confuses), and the GeoTIFFs can be opened beside the reference masks in any GIS. In '
+                'the recorded run the 5-tensor, 21 MB adapter (the head\'s weights and biases; its BatchNorm buffers are not trained and not exported) reloaded into a fresh pipeline with identical held-out metrics (`mean_iou_diff` 0.0, `metrics_identical` '
                 'True, `max_abs_score_diff` 0.0).</details>'
             ),
         },
@@ -482,7 +530,10 @@ TEMPLATE = {
         "## Interpretation and limits\n\n"
         "On 12 held-out chips the packaged crop-classification model reaches a mean IoU near 0.44 and an accuracy near 0.59 "
         "against a majority-class baseline of 0.01 and 0.14; a bounded fine-tuning of its segmentation head on 36 chips, "
-        "selected by validation loss with the frozen model as a candidate, lowers the class-weighted validation loss a little and leaves the mean IoU where it was (0.438 → 0.430 on the test chips in the build record). That is the claim: the "
+        "selected by validation loss with the frozen model as a candidate, lowers the class-weighted validation loss a little (0.9368 → 0.9114) and lowers the mean IoU a little "
+        "(0.4379 → 0.4302 on the test chips, 0.4609 → 0.4451 on validation, in the build record) — and underneath the mean, the per-class table shows the trade the "
+        "class-weighted loss makes: Natural Vegetation, the majority class, lost a quarter of its IoU (0.2494 → 0.1884) while Fallow/Idle Cropland gained (0.3229 → "
+        "0.3784); the loss counts rare classes up to 9× more than common ones, so it buys the rare classes with the common one. That is the claim: the "
         "adaptation contract runs end to end on real labelled multispectral time series drawn from a digest-verified tarball, "
         "the pickle is audited and converted rather than served, the network is carried in plain PyTorch, and the artifact that "
         "carries the change is 21 MB and reloads with the same outputs. It is not a claim that this sample improves the model — "
@@ -505,9 +556,21 @@ TEMPLATE = {
         "frozen model on held-out chips, and emit the shown machine-readable artifacts — without the repository being "
         "reachable. It does **not** establish benchmark superiority, production fitness, or crop-mapping skill beyond the "
         "checks shown.\n\n"
-        "**Optional experiments (they do not affect the default path):** set `TRAINABLE = 'head+last_block'`; raise `EPOCHS` "
-        "and watch the validation loss; try `LEARNING_RATE = 1e-4` to see the frozen model win every epoch; or bring your own "
-        "labelled chips through BYOD and read the baseline before the adapted number.\n\n"
+        "## Optional experiment: Predict → Change → Run → Observe → Explain\n\n"
+        "None of this affects the default path, and every adaptation starts from the pinned base — including after a `head+last_block` run, whose encoder block "
+        "is put back before the next run — so each run is a fresh experiment rather than continued training. **Scope of a re-run:** change the form field in "
+        "Section 6, then run Sections 6, 7 and 8 in that order (Section 5 need not be re-run; if you do, it restores the base and prints `restored_pinned_base`). "
+        "Pick one:\n\n"
+        "1. **Learning rate.** *Predict:* with `LEARNING_RATE = 1e-4` (ten times the default) on a checkpoint selected on this very split, will any epoch beat the "
+        "frozen model's class-weighted validation loss (0.9368 in the record), or will epoch 0 be kept? *Change* the field, *run* 6–8, *observe* `best_epoch`, the "
+        "per-epoch `val_loss` and `val_mean_iou`, and the `per_class_iou_changes`, and *explain* the result in terms of what a larger step does to a head near a "
+        "minimum. There is no recorded outcome for this setting; your run is the evidence.\n"
+        "2. **Scope.** *Predict:* does `TRAINABLE = 'head+last_block'` (7.1 M more parameters) move the validation mean IoU with the loss, or against it as the "
+        "head-only run did? *Observe* `trainable_parameters`, `gpu_peak_gb`, the per-epoch rows and the artifact's tensor count (now more than 5).\n"
+        "3. **Epochs.** *Predict:* with `EPOCHS = 10`, does the validation loss keep falling while the validation mean IoU keeps slipping? *Observe* the kept epoch "
+        "and the per-class changes.\n"
+        "4. **Your own chips.** Set `USE_BYOD = True` with `BYOD_PATH` (a `group` column keeps one field in one role) and re-run from Section 4: read the "
+        "majority-class baseline and the per-class IoU before the adapted number, and compare the frozen column — the packaged model — with the adapted one.\n\n"
         '## Troubleshooting\n\n- **Section 1 stops with "This notebook needs a Linux x86_64 runtime"** — you are on Windows, macOS or an ARM machine. Use Google '
         'Colab, Kaggle or a Linux x86_64 Jupyter server.\n- **The uv wheel fails its size/SHA-256 check, or a download in Section 1 times out** — run Section 1 '
         'again; a complete environment built from the same lock is reused, an incomplete one is finished. If it repeats, the network is blocking or altering '
@@ -521,8 +584,13 @@ TEMPLATE = {
         "**CUDA out of memory in Section 6** — another notebook holds the GPU, or `TRAINABLE = 'head+last_block'` with a larger `BATCH_SIZE` exceeds a T4. "
         'Restart the session, keep `BATCH_SIZE = 4`, and choose **Run all**.\n- **Section 5 prints `restored_pinned_base`** — you re-ran it after Section 6; the '
         'adapted head was put back to the base. Re-run Sections 6–8 in order.\n- **BYOD: a band, date, shape or label refusal** — the message names the rule; '
-        'chips must be 18-band 224 × 224 GeoTIFFs (three dates × six bands, date-major, digital numbers) with masks of 0 = no data and 1..13 = class, and at '
-        'least four chips need two classes.\n- **BYOD: "BYOD_PATH … does not exist"** — the path is relative to the working directory printed in the message.\n- '
+        'chips must be 18-band 224 × 224 GeoTIFFs (three dates × six bands, date-major, digital numbers) with masks of 0 = no data and 1..13 = class, and the '
+        'dataset needs at least two classes.\n- **BYOD: "… bring at least 7 chips"** — the seeded split takes 25 % for test and 20 % for validation and must leave 4 '
+        'training chips, so 7 distinct labelled chips is the minimum (more if a `group` column puts many chips in one group).\n- **BYOD: "pairs.csv row … is '
+        'listed but not in the zip"** or **"… is not a readable GeoTIFF"** — the message names the row and the file; fix the name in `pairs.csv` or replace the '
+        'file. The sample pair written by Section 4 shows the expected files.\n- **BYOD: "chips have no \'group\'"** — either give every row a `group` value (a field, '
+        'scene or region id) or leave the column out.\n- **Section 8 shows no strips** — they are also written as `outputs/{stem}_maps_<chip>.png`; on Jupyter make sure the '
+        'notebook is trusted.\n- **BYOD: "BYOD_PATH … does not exist"** — the path is relative to the working directory printed in the message.\n- '
         '**BYOD: "the upload dialog exists only in Google Colab"** — on Kaggle or Jupyter, put the zip (or folder) in the runtime and set `BYOD_PATH` to its path.\n- '
         '**BYOD: "Upload exactly one .zip file"** — the dialog was cancelled or several files were chosen; run the cell again.\n\n## Glossary\n\n- **HLS '
         "(Harmonized Landsat Sentinel-2):** NASA's surface-reflectance product on one 30 m grid; the six bands here are blue, green, red, narrow NIR, SWIR 1 "
@@ -534,12 +602,13 @@ TEMPLATE = {
         'for one class; its average over the classes present; the average per-class recall.\n- **Class weights:** the upstream loss counts rare classes up to 9× '
         'more than common ones.\n- **Encoder, neck, head:** the temporal ViT that turns patches into features; the transposed convolutions that fold the dates '
         'and upsample; the FCN layer that names each pixel.\n- **Frozen / adapted / pinned base:** the packaged model; the model after Section 6; the verified '
-        'packaged weights every adaptation starts from (`restore_base`).\n- **Block split:** roles assigned per 4 × 4-chip block so chips of one block never '
-        'straddle training and test.\n- **Pickle audit / safetensors:** the upstream checkpoint is a pickle that could run code when loaded; it is statically '
+        'packaged weights every adaptation starts from (`restore_base`).\n- **Block split / group split:** roles assigned per 4 × 4-chip block so chips of one block never '
+        'straddle training and test; for your own chips the `group` column of `pairs.csv` does the same for a field, scene or region.\n- **Class-weighted loss trade:** a loss that '
+        'counts rare classes more can lower itself by giving up the common class; the mean IoU barely moves while the per-class row does.\n- **Pickle audit / safetensors:** the upstream checkpoint is a pickle that could run code when loaded; it is statically '
         'checked against an allow-list and converted once to safetensors, a format that stores only tensors.\n- **Isolated environment:** the separate Python '
         'environment Section 1 builds from the hash lock; every later cell runs there.\n\n## Conclusion (your notes)\n\nComplete these in your own words; the '
         "recorded run's values are in the **Check your reasoning** answers above.\n\n- The frozen model's test mean IoU was ___ against the majority-class "
-        "baseline's ___; the easiest and hardest classes were ___ and ___.\n- Head fine-tuning lowered the validation loss but moved the test mean IoU to ___, "
+        "baseline's ___; the easiest and hardest classes were ___ and ___.\n- Head fine-tuning lowered the validation loss but moved the test mean IoU to ___, and the class that moved most was ___, "
         'which I read as ___.\n- The number I would not trust on its own is ___, because ___.\n- Before adapting on my own chips I would check the band and date '
         'order, split by ___, and read ___ first.\n\n'
         "## References\n\n"

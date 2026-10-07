@@ -219,8 +219,9 @@ def _byod_namespace(path: str) -> dict:
     loaded = []
     return {
         "USE_BYOD": True, "BYOD_PATH": path, "Path": Path, "loaded": loaded,
-        "load_byod_dataset": lambda p: loaded.append(Path(p)) or ["r"],
+        "load_byod_dataset": lambda p: loaded.append(Path(p)) or [{"id": "r", "group": "g"}],
         "split_dataset": lambda records, seed: {"train": records, "validation": records, "test": records},
+        "byod_minimum_records": lambda: 7,
     }
 
 
