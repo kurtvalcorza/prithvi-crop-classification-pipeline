@@ -35,7 +35,7 @@ import pickletools
 import time
 import zipfile
 from collections.abc import Callable, Mapping, Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
 
@@ -541,7 +541,7 @@ def _check_record(record: Any, index: int) -> dict[str, Any]:
         if not found <= allowed:
             raise ValueError(f"{label_name}: label values {sorted(found - allowed)} outside {sorted(allowed)}")
         item["label"] = np.ascontiguousarray(mask.astype(np.int64))
-    for key in ("split", "region", "source", "source_id"):
+    for key in ("split", "region", "source", "source_id", "group"):  # group: the BYOD field / scene id (CR-m6)
         if key in record:
             item[key] = record[key]
     return item
@@ -644,6 +644,24 @@ def validate_inputs(record: Mapping[str, Any]) -> dict[str, Any]:
 # --------------------------------------------------------------------------------------------------
 
 
+def _remember_base(base: dict[str, Any], model: Any, names: Sequence[str]) -> None:
+    """Keep a copy of each named tensor's pinned-base value the first time it is about to change."""
+    state = model.state_dict()
+    for name in names:
+        if name not in base:
+            base[name] = state[name].detach().clone()
+
+
+def _restore_base(base: Mapping[str, Any], model: Any) -> list[str]:
+    """Put every tensor that adaptation or an artifact overlay changed back to its pinned-base value."""
+    if not base:
+        return []
+    state = dict(model.state_dict())
+    state.update(base)
+    model.load_state_dict(state, strict=True)
+    return sorted(base)
+
+
 def _normalise(images: Any) -> Any:
     """(B, 3, 6, H, W) digital numbers -> the (B, 6, 3, H, W) standardised tensor the network was trained on.
 
@@ -671,6 +689,9 @@ class PrithviCropPipeline:
     weights_dir: Path
     source: str
     adapter: dict[str, Any] | None = None
+    # Pinned-base values of every tensor adapt() or load_artifact() has changed: each adaptation starts from the verified
+    # base, never from a previous run's weights, so epoch 0 is always the frozen model (2026-10-05 fleet sweep, SWP-F).
+    _base_state: dict[str, Any] = field(default_factory=dict, repr=False)
 
     @classmethod
     def from_pretrained(
@@ -827,6 +848,10 @@ class PrithviCropPipeline:
         torch.manual_seed(seed)
         started = time.perf_counter()
         model = self.model
+        current = model.state_dict()
+        previous_state = {k: current[k].detach().clone() for k in self._base_state}
+        restored = self.restore_base()
+        _remember_base(self._base_state, model, names)
         name_set = set(names)
         for name, param in model.named_parameters():
             param.requires_grad_(name in name_set)
@@ -908,6 +933,7 @@ class PrithviCropPipeline:
             # was before adapt() (trained tensors restored), frozen, with no adapter attached.
             restore = dict(model.state_dict())
             restore.update(initial_state)
+            restore.update(previous_state)  # a failed call leaves the weights as they were before it
             model.load_state_dict(restore, strict=True)
             model.eval()
             for param in model.parameters():
@@ -936,12 +962,22 @@ class PrithviCropPipeline:
             "n_train_records": len(train_checked),
             "n_steps": n_steps,
             "seed": seed,
+            "started_from": "pinned base" + (f" (restored {len(restored)} tensors an earlier run changed)" if restored else ""),
             "history": history,
             "seconds": round(time.perf_counter() - started, 2),
         }
         return dict(self.adapter)
 
     # ---- artifacts -------------------------------------------------------------------------------------
+
+    def restore_base(self) -> list[str]:
+        """Return the model to the pinned base: undo every earlier adapt() or load_artifact() overlay. Returns the
+        names of the restored tensors (empty when the model was never changed)."""
+        restored = _restore_base(self._base_state, self.model)
+        if restored:
+            self.model.eval()
+        self.adapter = None
+        return restored
 
     def save_artifact(self, output_dir: str | Path, metadata: Mapping[str, Any] | None = None) -> Path:
         """Write the adapted tensors as safetensors with a manifest."""
@@ -1022,6 +1058,8 @@ class PrithviCropPipeline:
         tensors = load_file(str(weights_path))
         if sorted(tensors) != expected:
             raise ValueError("artifact tensor names differ from the validated manifest")
+        self.restore_base()
+        _remember_base(self._base_state, self.model, sorted(tensors))
         state = self.model.state_dict()
         for key, value in tensors.items():
             if tuple(value.shape) != tuple(state[key].shape):

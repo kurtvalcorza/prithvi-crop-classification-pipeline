@@ -48,14 +48,22 @@ CODE_MARKERS = (
     "report=print)",
     # Stage 4: pinned tarball members, roles by block, sample pair, refusal probes
     "USE_BYOD = False",
+    "BYOD_PATH = ''",
+    "uploaded = files.upload() or {}",
     "splits = fetch_sample_dataset(cache_dir='weights/multi-temporal-crop')",
-    "splits = split_dataset(load_byod_dataset(byod_path), seed=0)",
+    "byod_records = load_byod_dataset(byod_path)",
+    "splits = split_dataset(byod_records, seed=0)",
+    "byod_minimum_records()",
+    "probe_fill = (test_records[1:] + train_records + val_records)[:MIN_RECORDS - 1]",
     "dataset_report = dataset_manifest(",
     "write_sample_pair(test_records[0], 'outputs/prithvi_crop_classification_sample_chip.tif', 'outputs/prithvi_crop_classification_sample_label.tif')",
     "validate_dataset(records)",
     # Stage 5: frozen model against the majority-class baseline
     "frozen_test = pipe.evaluate(test_records)",
+    "restored_tensors = pipe.restore_base()",
     "frozen_predictions = pipe.predict(test_records)",
+    "chip_name = lambda record: record.get('source_id', record['id'])",
+    "frozen_per_chip = per_chip_metrics(",
     "'baseline_majority_test'",
     # Stage 6: bounded head fine-tuning
     "adapt_result = pipe.adapt(",
@@ -67,6 +75,8 @@ CODE_MARKERS = (
     "assert abs(adapted_val['model']['mean_iou'] - adapt_result['history'][adapt_result['best_epoch']]['val']['mean_iou']) < 1e-2",
     # Stage 8: class maps, artifact export, reload parity, provenance
     "shown_predictions = pipe.predict(shown_records)",
+    "panel = class_map_panel(record, frozen_pred['mask'], pred['mask'])",
+    "display(PngImage(png, caption=name))",
     "_map_reference_",
     "pipe.save_artifact(artifact_dir, metadata=",
     "reloaded = PrithviCropPipeline.from_artifact(artifact_dir, weights_dir=WEIGHTS_DIR, device=pipe.device)",
@@ -115,6 +125,10 @@ FORBIDDEN_OUTSIDE_MODULE = (
     "from mmseg",
     "import timm",
 )
+# The one kernel cell (generator /2.2 isolated runtime): it builds the hash-locked environment and routes every later
+# cell to it, so it is the one place `urllib.request` belongs.
+INSTALL_CELL_MARKER = "# dimer: kernel cell"
+
 # ---------------------------------------------------------------------------
 # Shared checks. Everything below is source/structure validation only. Passing
 # these checks is NOT clean-runtime execution evidence under DIMER Notebook
@@ -159,9 +173,12 @@ COMMON_CODE_MARKERS = (
     "PINS = [",
     "NOTEBOOK_SOURCE = {",
     "SKIP_INSTALL = os.environ.get('DIMER_NOTEBOOK_CI_PREINSTALLED') == '1'",
-    "subprocess.run([sys.executable, '-m', 'pip', 'install', '-q', *PINS], check=True)",
-    "importlib.metadata.packages_distributions()",
-    "importlib.invalidate_caches()",
+    # SWP-R (2026-10-05 fleet sweep): the generator /2.2 isolated runtime replaces the in-kernel pinned install.
+    "'--require-hashes', '--only-binary', ':all:'",
+    "'--managed-python'",
+    "if len(wheel) != UV_BYTES or hashlib.sha256(wheel).hexdigest() != UV_SHA256:",
+    "if hashlib.sha256(LOCK_TEXT.encode('utf-8')).hexdigest() != LOCK_SHA256:",
+    "_ip.input_transformers_cleanup.append(_route_to_isolated_runtime)",
     "platform.python_version()",
     "torch.__version__",
     "MANIFEST = {",
@@ -593,18 +610,14 @@ def _validate_parity(path: Path, notebook: dict, code_cells: list[tuple[int, str
 
 
 def _validate_bootstrap_guard(path: Path, code_cells: list[tuple[int, str, ast.Module]]) -> None:
-    """The stale-import guard must actually raise: `if stale:` whose body raises RuntimeError."""
-    raises = False
-    for _, _, tree in code_cells:
-        for node in ast.walk(tree):
-            if isinstance(node, ast.If) and isinstance(node.test, ast.Name) and node.test.id == "stale":
-                for sub in ast.walk(node):
-                    if isinstance(sub, ast.Raise) and isinstance(sub.exc, ast.Call):
-                        func = sub.exc.func
-                        if isinstance(func, ast.Name) and func.id == "RuntimeError":
-                            raises = True
-    _check(raises, f"{path.name}: install cell must raise RuntimeError when already-imported packages change")
-
+    """RUN1/RUN10/ENV6 (SWP-R, 2026-10-05 fleet sweep): nothing is pip-installed into the kernel and no cell asks for a
+    restart. Exactly one cell runs in the kernel (the isolated-environment bootstrap); it reuses a matching environment."""
+    kernel = [source for _, source, _ in code_cells if INSTALL_CELL_MARKER in source]
+    _check(len(kernel) == 1, f"{path.name}: exactly one '{INSTALL_CELL_MARKER}' bootstrap cell is required, found {len(kernel)}")
+    code = "\n".join(source for _, source, _ in code_cells)
+    _check("'-m', 'pip', 'install'" not in code and "pip install" not in code, f"{path.name}: no cell may pip-install into the notebook kernel (RUN10)")
+    _check("Restart the runtime" not in code, f"{path.name}: no cell may ask for a runtime restart (RUN1)")
+    _check("_isolated_environment_ready()" in kernel[0], f"{path.name}: the bootstrap cell must reuse a matching isolated environment")
 
 def _validate_notebook_content(
     path: Path, code_cells: list[tuple[int, str, ast.Module]], markdown: str, embedded: list[int]
@@ -617,7 +630,10 @@ def _validate_notebook_content(
     _check(not missing, f"{path.name}: missing required source markers: {missing}")
     present = [label for label, pattern in FORBIDDEN_PATTERNS if pattern.search(code)]
     _check(not present, f"{path.name}: forbidden/insecure source: {present}")
-    leaked = [marker for marker in FORBIDDEN_OUTSIDE_MODULE if marker in outside]
+    outside_stage_cells = "\n".join(
+        text for index, text in stripped.items() if index not in embedded and INSTALL_CELL_MARKER not in text
+    )
+    leaked = [marker for marker in FORBIDDEN_OUTSIDE_MODULE if marker in outside_stage_cells]
     _check(not leaked, f"{path.name}: direct library use outside the carried module cell (G2): {leaked}")
     _check(
         f"pipe = {MODEL_LOAD_EXPR}" in outside,

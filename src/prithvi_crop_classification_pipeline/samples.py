@@ -33,10 +33,12 @@ from typing import Any
 
 from .pipeline import (
     BANDS,
+    CLASS_NAMES,
     IGNORE_INDEX,
     IMAGE_SIZE,
     MIN_RECORDS,
     MODEL_ID,
+    NUM_CLASSES,
     NUM_FRAMES,
     check_record,
     chip_digest,
@@ -819,15 +821,34 @@ def check_split_disjoint(splits: Mapping[str, Sequence[Mapping[str, Any]]]) -> d
     return {name: len(records) for name, records in splits.items()}
 
 
+def _split_counts(n: int, val_fraction: float, test_fraction: float) -> tuple[int, int]:
+    return max(1, round(n * test_fraction)), round(n * val_fraction)
+
+
+def byod_minimum_records(*, val_fraction: float = 0.2, test_fraction: float = 0.25) -> int:
+    """The smallest number of distinct labelled chips `split_dataset` accepts with these fractions: the split must
+    leave at least MIN_RECORDS training chips after the test and validation shares are taken (7 with the defaults,
+    not MIN_RECORDS itself; CR-m1)."""
+    n = MIN_RECORDS
+    while True:
+        n_test, n_val = _split_counts(n, val_fraction, test_fraction)
+        if n - n_test - n_val >= MIN_RECORDS:
+            return n
+        n += 1
+
+
 def split_dataset(
     records: Sequence[Mapping[str, Any]],
     *,
     val_fraction: float = 0.2,
     test_fraction: float = 0.25,
     seed: int = 0,
+    group_key: str = "group",
 ) -> dict[str, list[dict[str, Any]]]:
-    """Seeded shuffle of a BYOD dataset into train / validation / test after de-duplicating chips. Chips of one
-    field or one scene are near-duplicates; group them yourself (one region per split) when that matters."""
+    """Seeded split of a BYOD dataset into train / validation / test after de-duplicating chips. Chips of one field
+    or one scene are near-duplicates, so when every record carries `group_key` (a field, scene or region id; the
+    `group` column of pairs.csv) whole groups are assigned to one role each and no group spans two roles (CR-m6,
+    SPL5). Without groups the shuffle is by chip."""
     import random
 
     if not (0.0 <= val_fraction < 1.0 and 0.0 < test_fraction < 1.0 and val_fraction + test_fraction < 1.0):
@@ -841,12 +862,40 @@ def split_dataset(
             seen.add(key)
             unique.append(record)
     rng = random.Random(seed)
-    rng.shuffle(unique)
-    n_test = max(1, round(len(unique) * test_fraction))
-    n_val = round(len(unique) * val_fraction)
-    splits = {"test": unique[:n_test], "validation": unique[n_test : n_test + n_val], "train": unique[n_test + n_val :]}
+    n_test, n_val = _split_counts(len(unique), val_fraction, test_fraction)
+    groups = [str(r[group_key]) for r in unique if r.get(group_key) not in (None, "")]
+    if groups and len(groups) != len(unique):
+        raise ValueError(
+            f"{len(unique) - len(groups)} of {len(unique)} chips have no {group_key!r}; give every chip a group or none"
+        )
+    if groups:
+        by_group: dict[str, list[dict[str, Any]]] = {}
+        for record in unique:
+            by_group.setdefault(str(record[group_key]), []).append(record)
+        names = sorted(by_group)
+        rng.shuffle(names)
+        if len(names) < 3:
+            raise ValueError(
+                f"only {len(names)} distinct {group_key!r} value(s); at least 3 groups are needed for train, validation and test"
+            )
+        splits: dict[str, list[dict[str, Any]]] = {"test": [], "validation": [], "train": []}
+        for name in names:
+            if len(splits["test"]) < n_test:
+                splits["test"].extend(by_group[name])
+            elif len(splits["validation"]) < max(1, n_val):
+                splits["validation"].extend(by_group[name])
+            else:
+                splits["train"].extend(by_group[name])
+    else:
+        rng.shuffle(unique)
+        splits = {"test": unique[:n_test], "validation": unique[n_test : n_test + n_val], "train": unique[n_test + n_val :]}
     if len(splits["train"]) < MIN_RECORDS:
-        raise ValueError(f"split leaves {len(splits['train'])} training chips; at least {MIN_RECORDS} are required")
+        minimum = byod_minimum_records(val_fraction=val_fraction, test_fraction=test_fraction)
+        raise ValueError(
+            f"{len(unique)} distinct labelled chips split into {len(splits['test'])} test / {len(splits['validation'])} "
+            f"validation / {len(splits['train'])} training leave fewer than the {MIN_RECORDS} training chips adaptation "
+            f"needs: bring at least {minimum} chips" + (f" spread over enough {group_key!r} values" if groups else "")
+        )
     return splits
 
 
@@ -873,16 +922,37 @@ def load_byod_dataset(path: str | Path) -> list[dict[str, Any]]:
     missing = {"id", "image", "label"} - set(rows[0].keys() if rows else set())
     if missing:
         raise ValueError(f"pairs.csv is missing columns {sorted(missing)}")
+
+    def read(row_id: str, column: str, name: str, reader: Any) -> Any:
+        # CR-m1: a missing member or an undecodable file names the row, the file and the fix instead of a bare
+        # KeyError / TiffFileError.
+        try:
+            data = loader(name)
+        except (KeyError, FileNotFoundError):
+            raise ValueError(
+                f"pairs.csv row {row_id!r}: {column} file {name!r} is listed but not in the "
+                f"{'folder' if source.is_dir() else 'zip'}; add the file or fix the name in pairs.csv"
+            ) from None
+        target = Path(tmp) / f"{column}.tif"
+        target.write_bytes(data)
+        try:
+            return reader(target)
+        except Exception as exc:
+            raise ValueError(
+                f"pairs.csv row {row_id!r}: {column} file {name!r} is not a readable GeoTIFF "
+                f"({type(exc).__name__}: {str(exc)[:80]}); {column}s must be "
+                f"{'18-band 224 × 224' if column == 'image' else 'single-band 224 × 224'} TIFF files"
+            ) from None
+
     out = []
     with tempfile.TemporaryDirectory() as tmp:
         for row in rows:
-            image_path = Path(tmp) / "image.tif"
-            image_path.write_bytes(loader(row["image"]))
-            record: dict[str, Any] = {"id": row["id"], "image": read_chip(image_path)}
+            record: dict[str, Any] = {"id": row["id"], "image": read(row["id"], "image", row["image"], read_chip)}
             if row.get("label"):
-                label_path = Path(tmp) / "label.tif"
-                label_path.write_bytes(loader(row["label"]))
-                record["label"] = read_mask(label_path)
+                record["label"] = read(row["id"], "label", row["label"], read_mask)
+            if row.get("group"):  # CR-m6: an optional field / scene / region id that split_dataset keeps inside one role
+                record["group"] = row["group"].strip()
+                record["region"] = record["group"]
             out.append(record)
     return out
 
@@ -905,11 +975,12 @@ def write_sample_pair(record: Mapping[str, Any], image_path: str | Path, label_p
 
 
 def write_dataset_csv(records: Sequence[Mapping[str, Any]], path: str | Path) -> Path:
-    """Write the pairs table of a split (id, image, label, provenance) in the shape BYOD expects."""
+    """Write the pairs table of a split (id, image, label, group, source) in the shape BYOD expects; `group` is the
+    block id (`region`) of a sample chip, the column `split_dataset` keeps inside one role (CR-m6)."""
     out = Path(path)
     out.parent.mkdir(parents=True, exist_ok=True)
     with open(out, "w", encoding="utf-8", newline="") as handle:
-        writer = csv.DictWriter(handle, fieldnames=["id", "image", "label", "region", "source"])
+        writer = csv.DictWriter(handle, fieldnames=["id", "image", "label", "group", "source"])
         writer.writeheader()
         for record in records:
             writer.writerow(
@@ -917,11 +988,113 @@ def write_dataset_csv(records: Sequence[Mapping[str, Any]], path: str | Path) ->
                     "id": record["id"],
                     "image": f"{record.get('source_id', record['id'])}_merged.tif",
                     "label": f"{record.get('source_id', record['id'])}.mask.tif",
-                    "region": record.get("region", ""),
+                    "group": record.get("group", record.get("region", "")),
                     "source": record.get("source", ""),
                 }
             )
     return out
+
+
+# --------------------------------------------------------------------------------------------------
+# display helpers (CR-m4): a composite, the reference and the class maps as one PNG, with no plotting library
+# --------------------------------------------------------------------------------------------------
+
+
+def class_palette() -> Any:
+    """(NUM_CLASSES, 3) uint8 colours, one per class, fixed so every figure reads the same."""
+    import numpy as np
+
+    base = [
+        (255, 212, 0), (38, 115, 0), (168, 112, 0), (0, 168, 230), (255, 38, 38), (166, 0, 190), (255, 158, 10),
+        (0, 230, 180), (120, 120, 120), (220, 220, 110), (0, 0, 200), (140, 70, 20), (200, 255, 200),
+    ]
+    palette = np.array(base[:NUM_CLASSES], dtype=np.uint8)
+    if len(palette) < NUM_CLASSES:
+        raise ValueError("palette has fewer colours than classes")
+    return palette
+
+
+def false_colour_composite(image: Any, *, date: int = 1) -> Any:
+    """An (H, W, 3) float32 display composite of one date of a (3, 6, H, W) chip — SWIR 2, narrow NIR, red —
+    stretched per band to the 2nd..98th percentile of the valid pixels."""
+    import numpy as np
+
+    array = np.asarray(image, dtype=np.float32)
+    if array.ndim != 4 or array.shape[:2] != (NUM_FRAMES, len(BANDS)):
+        raise ValueError(f"expected a ({NUM_FRAMES}, {len(BANDS)}, H, W) chip, got {array.shape}")
+    if not 0 <= date < NUM_FRAMES:
+        raise ValueError(f"date must be in 0..{NUM_FRAMES - 1}")
+    out = np.zeros((array.shape[2], array.shape[3], 3), dtype=np.float32)
+    for channel, band in enumerate((5, 3, 2)):
+        plane = array[date, band]
+        valid = plane[np.isfinite(plane) & (plane > 0)]
+        low, high = (np.percentile(valid, (2, 98)) if valid.size else (0.0, 1.0))
+        out[..., channel] = np.clip((plane - low) / max(float(high - low), 1e-6), 0.0, 1.0)
+    return out
+
+
+def class_map_panel(record: Mapping[str, Any], frozen_mask: Any, adapted_mask: Any, *, gutter: int = 6) -> dict[str, Any]:
+    """One (H, 4W + 3·gutter, 3) uint8 image — middle-date composite | reference | frozen map | adapted map — with
+    no-data black in the reference and the legend (class → colour) as data, for `render_png` (CR-m4)."""
+    import numpy as np
+
+    palette = class_palette()
+    label = np.asarray(record["label"], dtype=np.int64)
+    composite = (false_colour_composite(record["image"]) * 255).astype(np.uint8)
+    panels = [composite]
+    for mask in (label, np.asarray(frozen_mask, dtype=np.int64), np.asarray(adapted_mask, dtype=np.int64)):
+        if mask.shape != label.shape:
+            raise ValueError(f"mask shape {mask.shape} != label shape {label.shape}")
+        rgb = palette[np.clip(mask, 0, NUM_CLASSES - 1)]
+        rgb[mask < 0] = 0
+        panels.append(rgb)
+    spacer = np.full((label.shape[0], gutter, 3), 255, dtype=np.uint8)
+    rows = []
+    for index, panel in enumerate(panels):
+        if index:
+            rows.append(spacer)
+        rows.append(panel)
+    legend = [{"class": name, "rgb": [int(v) for v in palette[c]]} for c, name in enumerate(CLASS_NAMES)]
+    return {
+        "rgb": np.concatenate(rows, axis=1),
+        "panels": ["SWIR 2 / NIR / red (middle date)", "reference (black = no data)", "frozen class map", "adapted class map"],
+        "legend": legend,
+    }
+
+
+def render_png(rgb: Any) -> bytes:
+    """Encode an (H, W, 3) uint8 array as a PNG (zlib + the PNG chunk format; no imaging library)."""
+    import struct
+    import zlib
+
+    import numpy as np
+
+    array = np.ascontiguousarray(np.asarray(rgb, dtype=np.uint8))
+    if array.ndim != 3 or array.shape[2] != 3:
+        raise ValueError(f"expected an (H, W, 3) uint8 array, got {array.shape}")
+    height, width = array.shape[:2]
+    raw = b"".join(b"\x00" + array[y].tobytes() for y in range(height))
+
+    def chunk(kind: bytes, payload: bytes) -> bytes:
+        body = kind + payload
+        return struct.pack(">I", len(payload)) + body + struct.pack(">I", zlib.crc32(body) & 0xFFFFFFFF)
+
+    header = struct.pack(">IIBBBBB", width, height, 8, 2, 0, 0, 0)
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", header) + chunk(b"IDAT", zlib.compress(raw, 6)) + chunk(b"IEND", b"")
+
+
+class PngImage:
+    """A displayable PNG (`display(PngImage(data))` renders it inline in the notebook)."""
+
+    def __init__(self, data: bytes, *, caption: str = "") -> None:
+        self.data = data
+        self.caption = caption
+
+    def _repr_png_(self) -> bytes:
+        return self.data
+
+    def __repr__(self) -> str:
+        return f"<PngImage {len(self.data)} bytes{(': ' + self.caption) if self.caption else ''}>"
 
 
 def dataset_manifest(splits: Mapping[str, Sequence[Mapping[str, Any]]]) -> dict[str, Any]:

@@ -70,6 +70,31 @@ def segmentation_metrics(
     return metrics_from_confusion(matrix, class_names)
 
 
+def per_chip_metrics(
+    predictions: Sequence[Any],
+    labels: Sequence[Any],
+    *,
+    class_names: Sequence[str],
+    ignore_index: int,
+    ids: Sequence[str] | None = None,
+) -> list[dict[str, Any]]:
+    """Mean IoU and accuracy chip by chip (CR-S5): the pooled numbers let large fields dominate; this list shows
+    the spread. The mean IoU of a chip averages over the classes present in that chip."""
+    out = []
+    for index, (pred, label) in enumerate(zip(predictions, labels, strict=True)):
+        metrics = segmentation_metrics([pred], [label], class_names=class_names, ignore_index=ignore_index)
+        out.append(
+            {
+                "id": ids[index] if ids is not None else index,
+                "mean_iou": metrics["mean_iou"],
+                "accuracy": metrics["accuracy"],
+                "classes_scored": metrics["classes_scored"],
+                "pixels": metrics["pixels"],
+            }
+        )
+    return out
+
+
 def majority_baseline(labels: Sequence[Any], *, class_names: Sequence[str], ignore_index: int) -> dict[str, Any]:
     """The constant predictor that names every pixel with the most frequent class of the scored labels — the best
     any constant map can do on these pixels — scored on the same pixels as the model."""
