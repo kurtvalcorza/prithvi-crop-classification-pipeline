@@ -1,0 +1,100 @@
+[colab] Parsing notebook '/home/kurt/colab-runs/prithvi-crop-classification-pipeline-1e503a2-971ea3/prithvi_crop_classification_colab_1e503a2_colab-cli-t4.ipynb'...
+[colab] Executing cell 1/12 - Infrastructure: build (or reuse) the isolated environment and route later cells to it...
+{'isolated_environment': '/content/dimer_isolated_env_3b098a1191b0', 'reused': False, 'isolated_python': '3.12.12', 'kernel_python': '3.13.15', 'locked_packages': 44, 'setup_seconds': 65}
+{'routed_to': '/content/dimer_isolated_env_3b098a1191b0/bin/python', 'worker_pid': 1858, 'worker_reused': False}
+[colab] Executing cell 2/12 - Infrastructure: record the runtime...
+{'notebook_source': {'repository': 'prithvi-crop-classification-pipeline', 'repository_revision': 'a3faec8ac4e4ec92b46962b7ee15c90650526a72', 'embedded_module': 'src/prithvi_crop_classification_pipeline/pipeline.py', 'embedded_modules': ['src/prithvi_crop_classification_pipeline/metrics.py', 'src/prithvi_crop_classification_pipeline/modeling.py', 'src/prithvi_crop_classification_pipeline/pipeline.py', 'src/prithvi_crop_classification_pipeline/samples.py'], 'module_sha256': 'f02c1f09ed059d374b3b88c74db07f343c051a6a08300834a5dddf6822ddd4a3', 'generator': 'build_notebook.py/2.2', 'notebook_spec': '2.0'}, 'python': '3.12.12', 'executable': '/content/dimer_isolated_env_3b098a1191b0/bin/python', 'torch': '2.14.0+cu130', 'tifffile': '2026.9.15', 'cuda': True}
+[colab] Executing cell 3/12 - prithvi_crop_classification-08...
+[colab] Executing cell 4/12 - prithvi_crop_classification-10...
+[colab] Executing cell 5/12 - prithvi_crop_classification-12...
+[colab] Executing cell 6/12 - prithvi_crop_classification-14...
+[colab] Executing cell 7/12 - Infrastructure: stage and digest-verify the pinned snapshot, then load the model...
+{'model_id': 'ibm-nasa-geospatial/Prithvi-EO-1.0-100M-multi-temporal-crop-classification', 'revision': 'b53a88b8da673800b67c34a98a527b77076e7035', 'license': 'apache-2.0', 'files': 3, 'total_bytes': 1680479459}
+Warning: You are sending unauthenticated requests to the HF Hub. Please set a HF_TOKEN to enable higher rate limits and faster downloads.
+{'weights_dir': '/content/weights/prithvi-eo-1.0-100m-crop', 'fetched': ['multi_temporal_crop_classification_Prithvi_100M.pth', 'README.md', 'multi_temporal_crop_classification_Prithvi_100M.py']}
+{'verified_files': 3, 'revision': 'b53a88b8da673800b67c34a98a527b77076e7035'}
+{'conversion': {'source': {'path': 'multi_temporal_crop_classification_Prithvi_100M.pth', 'bytes': 1680468041, 'sha256': '37ed41637eccccec65ca2031324e2c03a4f168e1ea0ea71ad180910589fa018c'}, 'audit': {'file': 'multi_temporal_crop_classification_Prithvi_100M.pth', 'torch_archive': True, 'pickles': 1, 'globals': ['_codecs.encode', 'collections.OrderedDict', 'numpy.core.multiarray.scalar', 'numpy.dtype', 'torch.FloatStorage', 'torch.LongStorage', 'torch._utils._rebuild_tensor_v2'], 'meta_globals': ['_codecs.encode', 'numpy.core.multiarray.scalar', 'numpy.dtype'], 'violations': [], 'audit_sha256': '465513635354b8c8a9c4bfd4a37b39d5306eb8ec63527905ce0195075d04108d'}, 'checkpoint': {'epoch': 80, 'iter': 30800, 'mmseg_version': '0.30.0+b8da6b9', 'mmcv_version': '1.6.2', 'entries': ['meta', 'optimizer', 'state_dict'], 'state_dict_tensors': 112, 'dropped_training_only_tensors': 14, 'optimizer_state_discarded': True}, 'converted': [{'path': 'prithvi-eo-1.0-100m-crop.safetensors', 'bytes': 537722508, 'sha256': 'd1df8044700a0d1e00b11b1fbac66e0495cf6647e1632a858c003eaf4b5ce36d'}], 'seconds': 25.07}}
+{'device': 'cuda', 'source': 'converted from the manifest-verified source checkpoint'}
+[colab] Executing cell 8/12 - prithvi_crop_classification-18...
+{'data_source': 'HLS multi-temporal crop classification chips (NASA IMPACT / IBM); Hugging Face dataset ibm-nasa-geospatial/multi-temporal-crop-classification, 60 chips selected 2026-09-20 from the validation archive; CC BY 4.0 (NASA IMPACT / IBM)', 'splits': {'train': 36, 'validation': 12, 'test': 12}, 'disjoint': {'train': 36, 'validation': 12, 'test': 12}, 'digest': 'be55792b6e61dcd9...'}
+{'train': {'classes_present': 13, 'largest_classes': [('Corn', 0.1435), ('Natural Vegetation', 0.1259), ('Soybeans', 0.1214), ('Forest', 0.093)], 'ignored_pixels': 0, 'blocks': 35}}
+{'validation': {'classes_present': 13, 'largest_classes': [('Natural Vegetation', 0.1382), ('Corn', 0.1299), ('Soybeans', 0.1077), ('Winter Wheat', 0.0985)], 'ignored_pixels': 0, 'blocks': 12}}
+{'test': {'classes_present': 13, 'largest_classes': [('Natural Vegetation', 0.1371), ('Forest', 0.1091), ('Wetlands', 0.1034), ('Developed/Barren', 0.102)], 'ignored_pixels': 0, 'blocks': 12}}
+{'first_test_chip': {'id': 'test-000', 'shape': (3, 6, 224, 224), 'value_range': [44.0, 6732.0], 'has_label': True, 'label_fraction': {'Natural Vegetation': 0.1151, 'Forest': 0.0, 'Corn': 0.008, 'Soybeans': 0.0, 'Wetlands': 0.0016, 'Developed/Barren': 0.0362, 'Open Water': 0.0001, 'Winter Wheat': 0.2396, 'Alfalfa': 0.2417, 'Fallow/Idle Cropland': 0.2531, 'Cotton': 0.0, 'Sorghum': 0.0, 'Other': 0.1045}, 'ignored_pixels': 0}}
+{'sample_pair': {'image': 'outputs/prithvi_crop_classification_sample_chip.tif', 'label': 'outputs/prithvi_crop_classification_sample_label.tif'}, 'pairs_csv': 'outputs/prithvi_crop_classification_sample_pairs.csv'}
+{'validation': 'record shape, date and band counts, chip size, finiteness, value range and label values only. Nothing checks that the bands are the six HLS bands in the right order, that the three dates are the growing-season dates the model was trained on, or that the label was drawn for this chip -- any (3, 6, 224, 224) array is classified without complaint'}
+{'probe': 'two-date chip', 'rejected': 'records[0]: image must have shape (3, 6, 224, 224), got (2, 6, 224, 224)'}
+{'probe': 'unknown label class', 'rejected': 'records[0]: label values [13] outside [-1, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]'}
+{'probe': 'digital numbers out of range', 'rejected': 'records[0]: digital numbers outside the plausible range (-2000.0, 20000.0): (2200.0, 336600.0)'}
+[colab] Executing cell 9/12 - prithvi_crop_classification-21...
+{'seconds': 4.4, 'metric': 'pixel IoU / accuracy over the labelled pixels of the held-out chips (ignore index excluded)'}
+{'baseline_majority_test': {'majority_class': 'Natural Vegetation', 'accuracy': 0.1371, 'mean_iou': 0.0105}}
+{'frozen_test': {'mean_iou': 0.4379, 'mean_accuracy': 0.6239, 'mean_f1': 0.5975, 'accuracy': 0.5905, 'classes_scored': 13}}
+{'frozen_test_iou': {'Natural Vegetation': 0.2494, 'Forest': 0.4288, 'Corn': 0.5, 'Soybeans': 0.5294, 'Wetlands': 0.4026, 'Developed/Barren': 0.3855, 'Open Water': 0.809, 'Winter Wheat': 0.5502, 'Alfalfa': 0.3857, 'Fallow/Idle Cropland': 0.3229, 'Cotton': 0.4321, 'Sorghum': 0.4158, 'Other': 0.2813}}
+{'frozen_validation': {'mean_iou': 0.4609, 'accuracy': 0.6196}}
+{'chip': 'chip_061_092', 'block': 'r15c23', 'dominant_label': 'Fallow/Idle Cropland', 'dominant_prediction': 'Alfalfa', 'agreement': 0.671, 'mean_iou': 0.2835}
+{'chip': 'chip_104_104', 'block': 'r26c26', 'dominant_label': 'Other', 'dominant_prediction': 'Alfalfa', 'agreement': 0.53, 'mean_iou': 0.23}
+{'chip': 'chip_131_433', 'block': 'r32c108', 'dominant_label': 'Corn', 'dominant_prediction': 'Corn', 'agreement': 0.595, 'mean_iou': 0.3154}
+{'chip': 'chip_138_430', 'block': 'r34c107', 'dominant_label': 'Developed/Barren', 'dominant_prediction': 'Developed/Barren', 'agreement': 0.654, 'mean_iou': 0.3548}
+{'chip': 'chip_164_477', 'block': 'r41c119', 'dominant_label': 'Soybeans', 'dominant_prediction': 'Soybeans', 'agreement': 0.658, 'mean_iou': 0.3527}
+{'chip': 'chip_186_422', 'block': 'r46c105', 'dominant_label': 'Open Water', 'dominant_prediction': 'Open Water', 'agreement': 0.818, 'mean_iou': 0.3771}
+{'per_chip_mean_iou_frozen': {'min': 0.1178, 'max': 0.3771, 'n_chips': 12}}
+{'decision_rule': 'argmax over the 13 class scores (no threshold)', 'scores_shape': (13, 224, 224)}
+[colab] Executing cell 10/12 - prithvi_crop_classification-24...
+{'epoch': 0, 'train_loss': None, 'val_loss': 0.9368, 'val_mean_iou': 0.4609, 'val_accuracy': 0.6196, 'note': 'frozen model'}
+{'epoch': 1, 'train_loss': 1.0971, 'val_loss': 0.9168, 'val_mean_iou': 0.4499, 'val_accuracy': 0.6085}
+{'epoch': 2, 'train_loss': 1.0626, 'val_loss': 0.9124, 'val_mean_iou': 0.4412, 'val_accuracy': 0.6014}
+{'epoch': 3, 'train_loss': 1.0757, 'val_loss': 0.9135, 'val_mean_iou': 0.4422, 'val_accuracy': 0.6025}
+{'epoch': 4, 'train_loss': 1.0626, 'val_loss': 0.9114, 'val_mean_iou': 0.4451, 'val_accuracy': 0.6046}
+{'trainable_parameters': 5312269, 'total_parameters': 134427661, 'steps': 36, 'best_epoch': 4, 'loss': 'cross-entropy with the upstream class weights, ignore index excluded', 'precision': 'float16 autocast + GradScaler', 'batchnorm': 'running statistics frozen (eval mode) during adaptation', 'seconds': 40.9, 'gpu_peak_gb': 3.4}
+[colab] Executing cell 11/12 - prithvi_crop_classification-27...
+{'mean_iou': {'baseline_majority': 0.0105, 'frozen': 0.4379, 'adapted': 0.4302}}
+{'mean_accuracy': {'baseline_majority': 0.0769, 'frozen': 0.6239, 'adapted': 0.625}}
+{'mean_f1': {'baseline_majority': 0.0186, 'frozen': 0.5975, 'adapted': 0.5886}}
+{'accuracy': {'baseline_majority': 0.1371, 'frozen': 0.5905, 'adapted': 0.5813}}
+{'per_class_iou_changes': {'Natural Vegetation': (0.2494, 0.1884), 'Forest': (0.4288, 0.4182), 'Corn': (0.5, 0.4861), 'Soybeans': (0.5294, 0.5236), 'Wetlands': (0.4026, 0.4062), 'Developed/Barren': (0.3855, 0.3753), 'Open Water': (0.809, 0.8051), 'Winter Wheat': (0.5502, 0.5514), 'Alfalfa': (0.3857, 0.3786), 'Fallow/Idle Cropland': (0.3229, 0.3784), 'Cotton': (0.4321, 0.3995), 'Sorghum': (0.4158, 0.4121), 'Other': (0.2813, 0.2693)}}
+{'chip': 'chip_061_092', 'frozen_mean_iou': 0.2835, 'adapted_mean_iou': 0.2772, 'classes_scored': 10}
+{'chip': 'chip_104_104', 'frozen_mean_iou': 0.23, 'adapted_mean_iou': 0.2259, 'classes_scored': 11}
+{'chip': 'chip_131_433', 'frozen_mean_iou': 0.3154, 'adapted_mean_iou': 0.3081, 'classes_scored': 12}
+{'chip': 'chip_138_430', 'frozen_mean_iou': 0.3548, 'adapted_mean_iou': 0.3494, 'classes_scored': 12}
+{'chip': 'chip_164_477', 'frozen_mean_iou': 0.3527, 'adapted_mean_iou': 0.3458, 'classes_scored': 12}
+{'chip': 'chip_186_422', 'frozen_mean_iou': 0.3771, 'adapted_mean_iou': 0.372, 'classes_scored': 11}
+{'chip': 'chip_200_318', 'frozen_mean_iou': 0.3484, 'adapted_mean_iou': 0.3324, 'classes_scored': 13}
+{'chip': 'chip_252_597', 'frozen_mean_iou': 0.2469, 'adapted_mean_iou': 0.2442, 'classes_scored': 13}
+{'chip': 'chip_281_252', 'frozen_mean_iou': 0.1178, 'adapted_mean_iou': 0.1244, 'classes_scored': 12}
+{'chip': 'chip_292_455', 'frozen_mean_iou': 0.2189, 'adapted_mean_iou': 0.1928, 'classes_scored': 12}
+{'chip': 'chip_331_527', 'frozen_mean_iou': 0.1998, 'adapted_mean_iou': 0.1916, 'classes_scored': 13}
+{'chip': 'chip_420_326', 'frozen_mean_iou': 0.1659, 'adapted_mean_iou': 0.1516, 'classes_scored': 13}
+{'per_chip_mean_iou_range': {'frozen': [0.1178, 0.3771], 'adapted': [0.1244, 0.372]}}
+{'validation_mean_iou': {'frozen': 0.4609, 'adapted': 0.4451}, 'validation_loss': {'frozen': 0.9367970625559489, 'kept_epoch': 0.9114243388175964}}
+{'report': 'outputs/prithvi_crop_classification_evaluation_report.json'}
+[colab] Executing cell 12/12 - prithvi_crop_classification-30...
+{'chip': 'chip_061_092', 'agreement': 0.69, 'largest_predicted': 'Alfalfa', 'note': 'sanity check on two chips'}
+{'chip': 'chip_061_092', 'panels': ['SWIR 2 / NIR / red (middle date)', 'reference (black = no data)', 'frozen class map', 'adapted class map']}
+<PngImage 177945 bytes: chip_061_092>
+
+[Image saved to: /tmp/tmpjeof1j6w.png]
+{'chip': 'chip_104_104', 'agreement': 0.522, 'largest_predicted': 'Alfalfa', 'note': 'sanity check on two chips'}
+{'chip': 'chip_104_104', 'panels': ['SWIR 2 / NIR / red (middle date)', 'reference (black = no data)', 'frozen class map', 'adapted class map']}
+<PngImage 160952 bytes: chip_104_104>
+
+[Image saved to: /tmp/tmpgpucw9hf.png]
+{'legend': {'Natural Vegetation': 'rgb(255, 212, 0)', 'Forest': 'rgb(38, 115, 0)', 'Corn': 'rgb(168, 112, 0)', 'Soybeans': 'rgb(0, 168, 230)', 'Wetlands': 'rgb(255, 38, 38)', 'Developed/Barren': 'rgb(166, 0, 190)', 'Open Water': 'rgb(255, 158, 10)', 'Winter Wheat': 'rgb(0, 230, 180)', 'Alfalfa': 'rgb(120, 120, 120)', 'Fallow/Idle Cropland': 'rgb(220, 220, 110)', 'Cotton': 'rgb(0, 0, 200)', 'Sorghum': 'rgb(140, 70, 20)', 'Other': 'rgb(200, 255, 200)'}}
+{'artifact': 'outputs/prithvi_crop_classification_adapter', 'format': 'org.valcorza.prithvi-crop-classification.adapter.v1', 'trainable': 'head', 'tensors': 5, 'bytes': 21249580, 'sha256': '4240b75b05faddf7...'}
+{'reload_parity': {'mean_iou_diff': 0.0, 'metrics_identical': True, 'max_abs_score_diff': 0.0}, 'reloaded_best_epoch': 4}
+outputs/:
+  - outputs/prithvi_crop_classification_adapter/adapter.safetensors (20751.5 KB)
+  - outputs/prithvi_crop_classification_adapter/manifest.json (9.6 KB)
+  - outputs/prithvi_crop_classification_evaluation_report.json (29.6 KB)
+  - outputs/prithvi_crop_classification_map_adapted_chip_061_092.tif (49.2 KB)
+  - outputs/prithvi_crop_classification_map_adapted_chip_104_104.tif (49.2 KB)
+  - outputs/prithvi_crop_classification_map_reference_chip_061_092.tif (49.2 KB)
+  - outputs/prithvi_crop_classification_map_reference_chip_104_104.tif (49.2 KB)
+  - outputs/prithvi_crop_classification_maps_chip_061_092.png (173.8 KB)
+  - outputs/prithvi_crop_classification_maps_chip_104_104.png (157.2 KB)
+  - outputs/prithvi_crop_classification_predictions.json (1.4 KB)
+  - outputs/prithvi_crop_classification_result.json (3.6 KB)
+  - outputs/prithvi_crop_classification_sample_chip.tif (1764.5 KB)
+  - outputs/prithvi_crop_classification_sample_label.tif (49.2 KB)
+  - outputs/prithvi_crop_classification_sample_pairs.csv (3.1 KB)
+[colab] Saving notebook with outputs to '/home/kurt/colab-runs/prithvi-crop-classification-pipeline-1e503a2-971ea3/prithvi_crop_classification_colab_1e503a2_colab-cli-t4_output.ipynb'...
