@@ -270,4 +270,68 @@ def test_scripted_refusal_input_is_the_real_etc_directory(monkeypatch, tmp_path)
     with pytest.raises(ValueError) as caught:
         _section4(monkeypatch, tmp_path, "/etc")
     line = _refusal_line(caught.value)
-    assert line.startswith("Refused: etc: FileNotFoundError: ") and "pairs.csv" in line
+    assert line.startswith("Refused: etc: the dataset cannot be read (FileNotFoundError: ") and "pairs.csv" in line
+
+
+# --- the catch is narrow: only bad input is refused; an internal TypeError/KeyError/OSError keeps its traceback ----
+
+
+def test_the_byod_catch_is_narrow_in_the_notebook_source():
+    import re
+
+    source = _cell(BYOD_CELL)
+    wrap = source[source.index("try:\n    if USE_BYOD:") : source.index(WRAP_END)]
+    assert re.findall(r"^\s*except (.+?)(?: as \w+)?:$", wrap, flags=re.M) == ["ImportError", "(OSError, zipfile.BadZipFile)", "TypeError", "BYODRefusal", "ValueError"]
+    assert "        try:\n            byod_records = load_byod_dataset(byod_path)\n        except (OSError, zipfile.BadZipFile) as exc:\n" in wrap
+
+
+@pytest.mark.parametrize("case", ["short pairs.csv row", "bad CRC"])
+def test_real_bad_input_is_still_one_refused_line(monkeypatch, tmp_path, case):
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    if case == "bad CRC":
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_STORED) as archive:
+            archive.writestr("pairs.csv", "x" * 64)
+        data = bytearray(buffer.getvalue())
+        data[data.index(b"x" * 64)] = ord("y")  # the stored bytes no longer match their CRC-32
+        (tmp_path / "bad.zip").write_bytes(bytes(data))
+        name, rule = "bad.zip", "the dataset cannot be read (BadZipFile: Bad CRC-32"
+    else:
+        (tmp_path / "chips").mkdir()
+        (tmp_path / "chips" / "pairs.csv").write_text("id,image,label\nr1\n", encoding="utf-8")
+        name, rule = "chips", "pairs.csv has a malformed row (unsupported operand type"
+    with pytest.raises(ValueError) as caught:
+        _section4(monkeypatch, tmp_path, str(tmp_path / name))
+    line = _refusal_line(caught.value)
+    assert line.startswith(f"Refused: {name}: {rule}"), line
+    assert sorted(p.name for p in (tmp_path / "outputs").iterdir()) == []
+
+
+def test_an_unreadable_dataset_is_still_one_refused_line(monkeypatch, tmp_path):
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    (tmp_path / "chips").mkdir()
+
+    def unreadable(_path):
+        raise PermissionError(13, "Permission denied", str(_path))
+
+    with pytest.raises(ValueError) as caught:
+        _section4(monkeypatch, tmp_path, str(tmp_path / "chips"), extra={"load_byod_dataset": unreadable})
+    assert _refusal_line(caught.value).startswith("Refused: chips: the dataset cannot be read (PermissionError: ")
+
+
+@pytest.mark.parametrize("error", [TypeError("internal helper bug"), KeyError("internal key"), OSError("internal I/O bug")], ids=["TypeError", "KeyError", "OSError"])
+def test_an_internal_error_after_the_loader_keeps_its_traceback(monkeypatch, tmp_path, error):
+    import traceback
+
+    monkeypatch.setitem(sys.modules, "google.colab", None)
+    (tmp_path / "chips").mkdir()
+
+    def broken_split(records, **kwargs):
+        raise error
+
+    with pytest.raises(type(error)) as caught:
+        _section4(monkeypatch, tmp_path, str(tmp_path / "chips"), extra={"load_byod_dataset": lambda _path: [{"id": "a"}], "split_dataset": broken_split})
+    assert caught.value is error and not getattr(caught.value, "dimer_refusal", False)
+    rendered = "".join(traceback.format_exception(caught.value))
+    assert rendered.startswith("Traceback") and "broken_split" in rendered and "Refused:" not in rendered
+    assert (tmp_path / "outputs" / f"{STEM}_result.json").exists()  # nothing is removed for an internal error
