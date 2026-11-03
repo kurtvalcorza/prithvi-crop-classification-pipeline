@@ -1,0 +1,72 @@
+{
+  "repo": "prithvi-crop-classification-pipeline",
+  "sha": "3536d5f88a7fcce9522b03f01fae48a3cfc93dad",
+  "notebook": "tutorials/prithvi_crop_classification_colab.ipynb",
+  "blob": "44bca82629cc4c98f4ec2a32b4e2a68e3b625ee3",
+  "gpu": "T4",
+  "session": "suite-prithvi-3536d5f-971e",
+  "started_utc": "2026-11-03T05:29:33+00:00",
+  "runner": "Colab CLI `colab exec -f` on a fresh session (not a browser Run all)",
+  "overrides": [
+    {
+      "name": "USE_BYOD",
+      "from": "False",
+      "to": "True"
+    },
+    {
+      "name": "BYOD_PATH",
+      "from": "''",
+      "to": "'/etc'"
+    }
+  ],
+  "run_copy_blob": "cea757527ed8807d4c3e337834e74c133b20625f",
+  "run_copy_sha256": "1a5d5ae12a2acb79fde4f7da88dceeeb0120d921e5a55bc7c7c0d63ccb7852d6",
+  "run_copy_note": "refusal run: the run copy is the committed notebook with the listed assignment overrides, cut immediately after the refusal cell and re-serialised (nbformat layout); input_unchanged compares against that copy",
+  "truncated_after_cell": "prithvi_crop_classification-18",
+  "refusal_cell_ref": "prithvi_crop_classification-18",
+  "refusal_cell_index": 8,
+  "cells_dropped": 14,
+  "code_cells_dropped": 4,
+  "original_sha256": "f77189ba3f1f8b94c4e44115a943b559dc6b3364ba552bb8bac5f3db11de4845",
+  "status": "[suite-prithvi-3536d5f-971e] gpu-t4-s-ass1c3-ja33gglvj3qu | Hardware: T4 | Shape: Standard | Variant: GPU | Status: IDLE",
+  "exec_exit_code": 0,
+  "stopped": true,
+  "stop_verified": true,
+  "wall_s": 118.1,
+  "input_unchanged": true,
+  "executed_file": "prithvi_crop_classification_colab_3536d5f_colab-cli-t4_output.ipynb",
+  "log_cells": [
+    1,
+    2,
+    3,
+    4,
+    5,
+    6,
+    7,
+    8
+  ],
+  "log_total": 8,
+  "code_cells": 8,
+  "executed_cells": 4,
+  "errors": [
+    {
+      "cell": "prithvi_crop_classification-18",
+      "ename": "IsolatedCellRefusal",
+      "evalue": "etc: the dataset cannot be read (FileNotFoundError: [Errno 2] No such file or directory: '/etc/pairs.csv'); give a .zip or a folder holding pairs.csv and the GeoTIFF files; fix the input and run this cell again (the earlier results of this session and their outputs/ files were removed)."
+    }
+  ],
+  "execution_counts": [],
+  "sequential": null,
+  "executed_sha256": "f10da1f98f67616d720f55ccd7d77de895918f88dbabc9d7a3c83a53c51f9fce",
+  "log_sequential_complete": true,
+  "mode": "expect_refusal",
+  "refusal_line": "Refused: etc: the dataset cannot be read (FileNotFoundError: [Errno 2] No such file or directory: '/etc/pairs.csv'); give a .zip or a folder holding pairs.csv and the GeoTIFF files; fix the input and run this cell again (the earlier results of this session and their outputs/ files were removed).",
+  "halting_cell_index": 8,
+  "halting_cell_id": "prithvi_crop_classification-18",
+  "error_cells": [
+    8
+  ],
+  "refusal_fail_reasons": [],
+  "refusal_ok": true,
+  "verdict": "PASS"
+}
